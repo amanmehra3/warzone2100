@@ -152,6 +152,16 @@ Warzone 2100 arsenal of defensive emplacements. Build, upgrade, and survive all 
   tables should be `const`), vars for mutable state.
 - Don't use `for (... in ...)` over arrays; use indexed loops.
 - Events must return fast — heavy work stutters the game. Spread work with `queue()`.
+- **Engine gotchas verified in Leg 1.1** (details in `doc/tower-defense/VERIFY.md`
+  §6.3.1): (1) with a challenge active the engine resets structure limits after
+  `eventGameInit` — apply limits in `eventStartLevel`; (2) call `applyLimitSet()`
+  before imposing script limits or the lobby set overwrites them; (3) the
+  `Stats.Building` global is keyed by display name — use each entry's `.Id` when
+  enumerating structure IDs; (4) `removeObject()` only **queues** removal — code
+  that places/counts objects after a removal must be `queue()`d a tick later
+  (affects leak removal in Leg 1.3: a leaked creep may still be enumerable the
+  same tick); (5) `addStructure()` respects structure limits — keep script-placed
+  structures (HQ) at limit 1 without `enableStructure` so players can't build them.
 
 ### 2.4 Challenge file mechanics
 - Challenge JSON fields (see `data/mp/challenges/hidebehind.json` for a live example):
