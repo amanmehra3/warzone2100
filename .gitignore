@@ -168,6 +168,9 @@ commit-*
 /build_*/
 !/build_tools/
 
+# local eslint install for linting game JS (see doc/tower-defense/VERIFY.md)
+/node_modules/
+
 #misc (MSVC)
 *.orig
 *.bak

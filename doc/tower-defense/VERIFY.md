@@ -188,6 +188,157 @@ run or exit code:
 - `miza.json` 8-player variant: **pass** — full match in ~55 s wall, exit 0,
   12 `Game State` blocks, only the known benign asserts.
 
-The TD-specific smoke test (launching a *challenge* with custom
-`scripts.rules` headlessly) is Leg 0.2's deliverable and will be added below
-when established.
+---
+
+## 5. Linting TD scripts (Leg 0.2)
+
+The repo's flat ESLint config `eslint.config.mjs` already matches
+`data/mp/challenges/**/*.js` via its `files: ["**/*.js"]` pattern — no config
+change was needed (verified empirically: a probe file with `eval`/`console.log`
+in `data/mp/challenges/towerdefense/` produced `no-eval` + `no-console`
+errors; a clean file exited 0).
+
+ESLint is not vendored; install it locally once per session (creates only
+`./node_modules/`, which is gitignored — no `package.json`/lockfile appears):
+
+```sh
+npm install --no-save --no-package-lock --no-audit --no-fund \
+  eslint @eslint/js eslint-plugin-n eslint-plugin-prettier eslint-plugin-jsonc prettier
+```
+
+Canonical lint invocation (run from repo root; exits non-zero on any lint
+error; `--no-error-on-unmatched-pattern` keeps it green while no TD scripts
+exist yet):
+
+```sh
+npx eslint --config eslint.config.mjs --no-error-on-unmatched-pattern \
+  "data/mp/challenges/**/*.js"
+```
+
+Verified with ESLint v10.7.0 on Node v22. (Upstream CI lints via super-linter
+with the same `eslint.config.mjs`; the command above is the local equivalent.)
+Note the config's relevant rules for our scripts: `no-console` is an **error**
+(use the game's `console()`/`debug()` API functions, never `console.log`).
+
+---
+
+## 6. TD smoke test — launching custom challenge rules headlessly (Leg 0.2)
+
+### 6.1 The finding (empirical)
+
+**Custom `scripts.rules` scripts CAN replace the default rules and run fully
+headlessly.** Mechanism: the `--skirmish=<name>.json` launcher. All three
+launch paths funnel through the same code in `src/multiint.cpp`
+(`loadMapChallengeAndPlayerSettings`, ~line 555): if the settings JSON has a
+`scripts.rules` key, the engine calls `loadGlobalScript(path + value)` and
+**skips** `multiplay/script/rules/init.js` entirely. The only difference
+between launchers is the prefix `path` prepended to the `rules` value:
+
+| Launcher | JSON location (virtual path) | `scripts.rules` value is relative to |
+|---|---|---|
+| Challenges menu (GUI) | `challenges/<file>.json` | `challenges/` |
+| `--skirmish=<f>.json` | `tests/<f>.json` (= `data/mp/tests/`) | `tests/` |
+| `--autohost=<f>` | `autohost/<f>` | `autohost/` |
+
+**Consequence for challenge JSONs (corrects plan §2.4):** in
+`data/mp/challenges/td-outpost.json`, the correct value is
+`"rules": "towerdefense/td_rules.js"` (relative to `challenges/`), NOT
+`"challenges/towerdefense/td_rules.js"`.
+
+**Log visibility:** the JS `debug(...)` API writes directly to **stderr**
+(`src/wzapi.cpp` `debugOutputStrings`); `console(...)` is in-game-only and
+invisible headlessly. TD scripts should emit a few `debug()` markers for the
+harness.
+
+**`include()` resolution:** data-root-relative paths are tried first
+(`src/wzapi.cpp` `loadFileForInclude`), so any script can
+`include("challenges/towerdefense/td_waves.js")` regardless of which launcher
+loaded it.
+
+**Loose data dir:** the engine mounts plain `mp/` + `base/` directories as
+well as `.wz` archives (`src/init.cpp` `rebuildSearchPath`), so
+`--datadir="$(pwd)/data"` runs straight off the source tree — script edits
+take effect on next launch with **no data rebuild**. (Alternative: rebuild
+`mp.wz` with `cmake --build build/native --target data_mp` and use
+`--datadir=$(pwd)/build/native/data`.)
+
+### 6.2 The canonical TD harness pattern (used by Sprint 1+ legs)
+
+Two small *tracked* harness files in `data/mp/tests/` (created in Sprint 1)
+mirror the real challenge but launch via `--skirmish`:
+- `data/mp/tests/td-harness.json` — copy of the challenge JSON with
+  `"scripts": { "rules": "td-harness_rules.js" }`.
+- `data/mp/tests/td-harness_rules.js` — one-line shim:
+  `include("challenges/towerdefense/td_rules.js");`
+
+This pattern was proven in Leg 0.2 with throwaway probes (deleted after): the
+shim's include executed the challenge-dir script at load time and its
+`eventStartLevel` fired.
+
+### 6.3 Canonical command + success markers
+
+```sh
+rm -rf /tmp/wz-td-config && mkdir -p /tmp/wz-td-config
+timeout 120 ./build/native/src/warzone2100 \
+  --configdir=/tmp/wz-td-config \
+  --datadir="$(pwd)/data" \
+  --skirmish=<harness-name>.json --autogame --headless --nosound \
+  2>&1 | tee /tmp/td-smoke.log
+```
+
+Success looks like (from the Leg 0.2 probe run; TD scripts must keep emitting
+equivalent `debug()` markers):
+1. Marker lines from the rules script on stderr, in order:
+   - top-level-executed marker (script parsed and run),
+   - `eventGameInit` marker,
+   - `eventStartLevel` marker,
+   - repeating timer-tick markers with strictly increasing `gameTime`
+     (proof the game loop and script timers are running).
+2. Near shutdown: `Destroying [0]:tests/<rules script>` (proof default rules
+   were replaced — with default rules this line reads
+   `Destroying [0]:multiplay/script/rules/init`).
+3. Exit code: `124` (timeout kill) is **expected and OK** while TD rules have
+   no win/lose implementation (probe gameplay never ends). Once Leg 1.3+ adds
+   end conditions and the harness game can conclude, expect `0`. Crash exit
+   codes (`134`, `139`) are always failures.
+
+Reference probe evidence (2026-07-15, throwaway files since deleted):
+```
+TD_PROBE: rules script top-level executed
+TD_PROBE: eventGameInit fired
+TD_PROBE: eventStartLevel fired; me=0 mapName=Sk-HighGround players=2
+TD_PROBE: tick at gameTime=5002
+...
+TD_PROBE: tick at gameTime=6380002
+info    |…: [~quickjs_scripting_instance:443] Destroying [0]:tests/td_probe_rules
+```
+
+### 6.4 What can and cannot be verified headlessly (honest statement)
+
+**CAN be verified headlessly** (and every later leg must):
+- Custom rules script loads, replaces default rules, and executes.
+- All script events/timers fire; full game simulation runs (unthrottled,
+  ~100× real time), including unit spawning, combat, structures, power.
+- Script-observable game state, via `debug()` prints to stderr.
+- Lint cleanliness of all TD scripts.
+
+**CANNOT be verified headlessly:**
+- The Challenges *menu* flow (challenge listed, description shown, clicking
+  it) — GUI only. The underlying `scripts.rules` loading is the same code
+  path as the verified `--skirmish` one (only the `challenges/` prefix
+  differs), but the actual menu launch must be verified in a real session
+  (Leg 1.1 does this; the web build legs verify it via Playwright).
+- Anything visual: reticule buttons, console() text, beacons, camera.
+- Human-interactive play (tower placement UX etc.).
+- Headless human-player start: `--skirmish` + `--autogame` gives the local
+  player an AI; a human-driven TD session is inherently non-headless.
+
+### 6.5 Verification status (Leg 0.2, 2026-07-15)
+
+- Lint probe (bad file rejected, clean file passes, challenges glob covered):
+  **pass**.
+- Headless custom-rules probe via `--skirmish=td_probe.json`: **pass**
+  (markers above; ticks ran for the full 60 s window ≈ 106 game-minutes).
+- include()-shim pattern (tests shim → challenges-dir script): **pass**.
+- Throwaway probe files deleted before commit: **confirmed** (`git status`
+  clean except intended files).
