@@ -305,6 +305,22 @@ TD: heartbeat tick=30 gameTime=30002        (repeating, gameTime increasing)
 ```
 and NO lines matching `TD: ERROR`,
 `could not be built due to building limits`, or `Syntax error`.
+With the wave engine (Leg 1.2) the same run must also show, per wave:
+```
+TD-WAVE: lane 0 reach check wheeled=true tracked=true hover=true   (lane 1 too)
+TD-WAVE: BUILD phase for wave N/10 (...)
+TD-WAVE: wave N SPAWNING, <count> creeps queued
+TD-WAVE: spawned <body>/<turret> id=... lane=... at (x,y), K left
+TD-WAVE: wave N ACTIVE with <count> creeps
+TD-WAVE: push check: ... lead id=... at (x,y) distHQ=<decreasing>
+TD-WAVE: HARNESS auto-clear removing <count> creeps
+TD-WAVE: wave N CLEARED, reward=... power=<increasing>
+```
+cycling through all 10 waves to `TD-WAVE: all 10 waves finished`, with no
+`TD-WAVE: ERROR` lines. (Auto-clear lines come from the harness-only
+`tdDebugAutoClearSecs` knob set in the tests shim; the real challenge leaves
+it 0.) A 90 s wall run covers the entire 10-wave cycle headlessly.
+
 Usually the shutdown also logs `Destroying [0]:tests/td-harness_rules` (proof
 default rules were replaced), but the timeout kill can truncate shutdown
 logging — treat that line as informative, not required (the
@@ -355,6 +371,21 @@ simply sits idle; all TD script activity proceeds.
 - Human-interactive play (tower placement UX etc.).
 - Headless human-player start: `--skirmish` + `--autogame` gives the local
   player an AI; a human-driven TD session is inherently non-headless.
+- **Loading a save of the custom-rules game (Leg 1.2 finding):** the SAVE
+  side works headlessly (`--saveandquit=savegames/skirmish/<name>.gam` from
+  the harness; all `td*` globals, timers, and queued calls serialize into the
+  save's `scriptstate.json` — inspected and confirmed). But a harness save
+  stores `challengeFileName=""`, so `--loadskirmish=<name>` cannot re-create
+  the custom rules script (`Script context ... not found`) and falls back to
+  the DEFAULT rules — an engine limitation of the tests path (same reason the
+  save/load lines in `tests/test.sh` are commented out). Real challenge saves
+  (launched from the Challenges menu) store `challengeFileName` and the load
+  path re-creates `scripts.rules` (src/game.cpp ~4722 + challenge loader) —
+  code-audited, needs a desktop session to confirm end-to-end.
+  Related: the engine DOES save/restore script timers and queued calls
+  (scriptstate.json version 2) — the old "timers are not saved" doc note is
+  outdated; TD timer arming is idempotent (removeTimer-then-setTimer) so it
+  is correct under both behaviors.
 
 ### 6.5 Verification status (Leg 0.2, 2026-07-15)
 

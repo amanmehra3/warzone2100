@@ -10,6 +10,7 @@
 
 include("challenges/towerdefense/td_maps.js");
 include("challenges/towerdefense/td_towers.js");
+include("challenges/towerdefense/td_waves.js");
 
 // Receive events for all players' objects (needed for creep tracking in later legs).
 receiveAllEvents(true);
@@ -20,8 +21,9 @@ const tdConfig = {
 	siegePlayer: 1,     // design decision D1 ("SIEGE", script-driven, ai: null)
 	startingPower: 1300, // tunable
 	truckLimit: 2,      // no unit production, ever
-	masterTickMs: 1000, // 1s master tick (wave engine hooks in here in Leg 1.2)
-	heartbeatTicks: 30  // debug heartbeat every N ticks (headless verification)
+	masterTickMs: 1000, // 1s master tick (drives the wave engine)
+	heartbeatTicks: 30, // debug heartbeat every N ticks (headless verification)
+	reorderSecs: 10     // re-issue attack-move to non-fighting creeps every N s
 };
 
 // ---------------------------------------------------------------- mutable state
@@ -170,15 +172,20 @@ function tdPlaceStartingBoard()
 		" structLimitTower=" + getStructureLimit("GuardTower1", tdConfig.humanPlayer));
 	hackNetOn();
 	queue("tdSetReticule", 100);
+	tdWavesBegin(); // start the wave cycle (BUILD phase of wave 1)
 	debug("TD: setup complete");
 }
 
 // ---------------------------------------------------------------- timers
 
 // All timers are armed here, and ONLY here — called from both eventStartLevel
-// and eventGameLoaded (timers do not survive save/load).
+// and eventGameLoaded. NOTE (Leg 1.2 finding): the current engine DOES save
+// and restore script timers and queued calls (scriptstate.json, version 2) —
+// the "timers are not saved" doc note is outdated. removeTimer() first makes
+// re-arming idempotent either way (no double ticks after load).
 function tdArmTimers()
 {
+	removeTimer("tdMasterTick");
 	setTimer("tdMasterTick", tdConfig.masterTickMs);
 	debug("TD: timers armed");
 }
@@ -186,10 +193,11 @@ function tdArmTimers()
 function tdMasterTick()
 {
 	tdTickCount += 1;
-	// Wave engine state machine hooks in here (Leg 1.2).
+	tdWaveTick(); // wave engine state machine (td_waves.js)
 	if (tdTickCount % tdConfig.heartbeatTicks === 0)
 	{
-		debug("TD: heartbeat tick=" + tdTickCount + " gameTime=" + gameTime);
+		debug("TD: heartbeat tick=" + tdTickCount + " gameTime=" + gameTime +
+			" waveState=" + tdWaveState + " wave=" + tdWaveNum);
 	}
 }
 
@@ -230,9 +238,18 @@ function eventStartLevel()
 
 function eventGameLoaded()
 {
-	debug("TD: eventGameLoaded - re-arming timers");
+	debug("TD: eventGameLoaded - re-arming timers, waveState=" + tdWaveState +
+		" wave=" + tdWaveNum + " pendingSpawns=" + tdPendingSpawns.length);
 	tdSetupUx();
 	tdArmTimers();
+	// The engine restores queued calls too (Leg 1.2 finding), but re-queueing
+	// pending spawns is harmless: tdSpawnNext() drains a shared array and
+	// no-ops once it is empty. Belt-and-braces for older engines.
+	if (tdPendingSpawns.length > 0)
+	{
+		tdQueuePendingSpawns();
+	}
+	queue("tdSetReticule", 100);
 }
 
 // Keep the Build button truthful if the player loses trucks.

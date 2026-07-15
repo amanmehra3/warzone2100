@@ -1,0 +1,238 @@
+// Siege Protocol — data-driven wave engine.
+// Loaded via include("challenges/towerdefense/td_waves.js") from td_rules.js.
+// Wave tables live per-map in td_maps.js (tdMapDef.waves).
+//
+// State machine (driven from tdMasterTick in td_rules.js, 1s tick):
+//   IDLE -> BUILD -> SPAWNING -> ACTIVE -> (CLEARED) -> BUILD ... -> DONE
+// Savegame rules: all mutable state below is plain types (saved/restored);
+// queued spawns are re-queued from eventGameLoaded (queue() is not saved).
+
+// ---------------------------------------------------------------- state (saved)
+var tdWaveNum = 0;          // 1-based wave number; 0 = before first wave
+var tdWaveState = "IDLE";   // IDLE | BUILD | SPAWNING | ACTIVE | DONE
+var tdBuildSecsLeft = 0;    // BUILD countdown (seconds)
+var tdActiveSecs = 0;       // seconds current wave has been SPAWNING/ACTIVE
+var tdWaveDroidIds = [];    // ids (numbers) of live droids of the current wave
+var tdPendingSpawns = [];   // plain spawn specs not yet executed
+// Harness-only knob: when > 0, live wave droids are force-removed after this
+// many ACTIVE seconds so the CLEARED path can be exercised headlessly (no
+// towers exist to kill creeps). MUST stay 0 here; the tests shim overrides it.
+var tdDebugAutoClearSecs = 0;
+
+// ---------------------------------------------------------------- helpers
+
+function tdAnnounce(text)
+{
+	console(text);              // player-facing (invisible headlessly)
+	debug("TD-UI: " + text);    // harness-visible mirror
+}
+
+function tdLivingWaveDroids()
+{
+	// Reconcile tracked ids against reality (never store objects in globals).
+	const alive = enumDroid(tdConfig.siegePlayer);
+	const aliveIds = {};
+	for (let i = 0; i < alive.length; ++i)
+	{
+		aliveIds[alive[i].id] = true;
+	}
+	const stillAlive = [];
+	for (let j = 0; j < tdWaveDroidIds.length; ++j)
+	{
+		if (aliveIds[tdWaveDroidIds[j]])
+		{
+			stillAlive.push(tdWaveDroidIds[j]);
+		}
+	}
+	return stillAlive;
+}
+
+// ---------------------------------------------------------------- phases
+
+function tdStartBuildPhase()
+{
+	const nextWave = tdMapDef.waves[tdWaveNum]; // tdWaveNum is 1-based; index = next wave
+	tdWaveState = "BUILD";
+	tdBuildSecsLeft = nextWave.delay;
+	tdActiveSecs = 0;
+	debug("TD-WAVE: BUILD phase for wave " + (tdWaveNum + 1) + "/" + tdMapDef.waves.length +
+		" (" + tdBuildSecsLeft + "s)");
+	tdAnnounce(_("Wave") + " " + (tdWaveNum + 1) + " " + _("incoming in") + " " + tdBuildSecsLeft + "s");
+}
+
+function tdBeginWave()
+{
+	tdWaveNum += 1;
+	const wave = tdMapDef.waves[tdWaveNum - 1];
+	tdWaveState = "SPAWNING";
+	tdActiveSecs = 0;
+	tdWaveDroidIds = [];
+	tdPendingSpawns = [];
+	for (let g = 0; g < wave.groups.length; ++g)
+	{
+		const group = wave.groups[g];
+		for (let c = 0; c < group.count; ++c)
+		{
+			tdPendingSpawns.push({
+				name: group.template.name,
+				body: group.template.body,
+				prop: group.template.prop,
+				turrets: group.template.turrets,
+				spawn: group.spawn,
+				delayMs: c * group.stagger
+			});
+		}
+	}
+	debug("TD-WAVE: wave " + tdWaveNum + " SPAWNING, " + tdPendingSpawns.length + " creeps queued");
+	if (wave.announce)
+	{
+		tdAnnounce(wave.announce);
+	}
+	tdQueuePendingSpawns();
+}
+
+// Queue one tdSpawnNext call per pending spawn (also used by eventGameLoaded
+// to re-queue what was pending at save time — queue() calls are not saved).
+function tdQueuePendingSpawns()
+{
+	for (let i = 0; i < tdPendingSpawns.length; ++i)
+	{
+		queue("tdSpawnNext", tdPendingSpawns[i].delayMs);
+	}
+}
+
+function tdSpawnNext()
+{
+	const spec = tdPendingSpawns.shift();
+	if (!spec)
+	{
+		return;
+	}
+	const spawnPos = tdMapDef.spawns[spec.spawn];
+	const creep = addDroid(tdConfig.siegePlayer, spawnPos.x, spawnPos.y,
+		spec.name, spec.body, spec.prop, "", "", spec.turrets[0]);
+	if (creep)
+	{
+		tdWaveDroidIds.push(creep.id);
+		orderDroidLoc(creep, DORDER_SCOUT, tdMapDef.hq.x, tdMapDef.hq.y);
+		debug("TD-WAVE: spawned " + spec.body + "/" + spec.turrets[0] +
+			" id=" + creep.id + " lane=" + spec.spawn +
+			" at (" + spawnPos.x + "," + spawnPos.y + "), " +
+			tdPendingSpawns.length + " left");
+	}
+	else
+	{
+		debug("TD-WAVE: ERROR - addDroid failed for " + spec.body + "/" + spec.turrets[0] +
+			" lane=" + spec.spawn);
+	}
+}
+
+function tdOnWaveCleared()
+{
+	const wave = tdMapDef.waves[tdWaveNum - 1];
+	setPower(playerPower(tdConfig.humanPlayer) + wave.reward, tdConfig.humanPlayer);
+	debug("TD-WAVE: wave " + tdWaveNum + " CLEARED, reward=" + wave.reward +
+		" power=" + playerPower(tdConfig.humanPlayer));
+	tdAnnounce(_("Wave") + " " + tdWaveNum + " " + _("cleared!") + " +" + wave.reward + " " + _("power"));
+	if (tdWaveNum >= tdMapDef.waves.length)
+	{
+		tdWaveState = "DONE";
+		debug("TD-WAVE: all " + tdWaveNum + " waves finished (victory logic arrives in Leg 1.4)");
+		return;
+	}
+	tdStartBuildPhase();
+}
+
+// Keep creeps pushing toward the HQ: re-issue attack-move to any wave droid
+// not currently fighting. Runs every tdConfig.reorderSecs from the tick.
+function tdReorderCreeps()
+{
+	const creeps = enumDroid(tdConfig.siegePlayer);
+	let reordered = 0;
+	for (let i = 0; i < creeps.length; ++i)
+	{
+		if (creeps[i].order !== DORDER_ATTACK)
+		{
+			orderDroidLoc(creeps[i], DORDER_SCOUT, tdMapDef.hq.x, tdMapDef.hq.y);
+			reordered += 1;
+		}
+	}
+	if (creeps.length > 0)
+	{
+		const lead = creeps[0];
+		debug("TD-WAVE: push check: " + creeps.length + " creeps, reordered " + reordered +
+			", lead id=" + lead.id + " at (" + lead.x + "," + lead.y + ") distHQ=" +
+			distBetweenTwoPoints(lead.x, lead.y, tdMapDef.hq.x, tdMapDef.hq.y));
+	}
+}
+
+// ---------------------------------------------------------------- master tick
+
+function tdWaveTick()
+{
+	if (tdWaveState === "IDLE" || tdWaveState === "DONE")
+	{
+		return;
+	}
+
+	if (tdWaveState === "BUILD")
+	{
+		tdBuildSecsLeft -= 1;
+		if (tdBuildSecsLeft > 0 && (tdBuildSecsLeft % 10 === 0 || tdBuildSecsLeft <= 5))
+		{
+			tdAnnounce(_("Wave") + " " + (tdWaveNum + 1) + ": " + tdBuildSecsLeft + "s");
+		}
+		if (tdBuildSecsLeft <= 0)
+		{
+			tdBeginWave();
+		}
+		return;
+	}
+
+	// SPAWNING or ACTIVE
+	tdActiveSecs += 1;
+	if (tdWaveState === "SPAWNING" && tdPendingSpawns.length === 0)
+	{
+		tdWaveState = "ACTIVE";
+		debug("TD-WAVE: wave " + tdWaveNum + " ACTIVE with " + tdWaveDroidIds.length + " creeps");
+	}
+	if (tdActiveSecs % tdConfig.reorderSecs === 0)
+	{
+		tdReorderCreeps();
+	}
+	// Harness-only forced clear (inert in the real challenge: knob stays 0).
+	if (tdDebugAutoClearSecs > 0 && tdWaveState === "ACTIVE" && tdActiveSecs >= tdDebugAutoClearSecs)
+	{
+		const leftovers = enumDroid(tdConfig.siegePlayer);
+		debug("TD-WAVE: HARNESS auto-clear removing " + leftovers.length + " creeps");
+		for (let i = 0; i < leftovers.length; ++i)
+		{
+			removeObject(leftovers[i]);
+		}
+		// removals are queued (VERIFY.md 6.3.1); reconciliation below sees them next tick
+	}
+	tdWaveDroidIds = tdLivingWaveDroids();
+	if (tdWaveState === "ACTIVE" && tdWaveDroidIds.length === 0)
+	{
+		tdOnWaveCleared();
+	}
+}
+
+// Called from td_rules.js once the board is placed (fresh game only).
+function tdWavesBegin()
+{
+	if (tdWaveState !== "IDLE")
+	{
+		return;
+	}
+	// Empirical lane check: can standard propulsion reach the HQ from each spawn?
+	for (let i = 0; i < tdMapDef.spawns.length; ++i)
+	{
+		const sp = tdMapDef.spawns[i];
+		debug("TD-WAVE: lane " + i + " reach check wheeled=" +
+			propulsionCanReach("wheeled01", sp.x, sp.y, tdMapDef.hq.x, tdMapDef.hq.y) +
+			" tracked=" + propulsionCanReach("tracked01", sp.x, sp.y, tdMapDef.hq.x, tdMapDef.hq.y) +
+			" hover=" + propulsionCanReach("hover01", sp.x, sp.y, tdMapDef.hq.x, tdMapDef.hq.y));
+	}
+	tdStartBuildPhase();
+}

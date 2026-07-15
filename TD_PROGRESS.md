@@ -7,7 +7,7 @@ Plan: TOWER_DEFENSE_PLAN.md | Branch: claude/tower-defense-game-concept-ree0e6
 | 0.1 | ✅ | 2026-07-14 | Native Ubuntu 24.04 build (Release, Ninja) + headless smoke test; see doc/tower-defense/VERIFY.md |
 | 0.2 | ✅ | 2026-07-15 | Lint recipe + headless custom-rules launch proven via `--skirmish` tests JSON; see VERIFY.md §5–§6 |
 | 1.1 | ✅ | 2026-07-15 | td-outpost challenge + td_rules/td_maps/td_towers on Sk-UrbanChasm; committed headless harness (td-harness.json); verified per VERIFY.md §6.3 |
-| 1.2 | ☐ | | |
+| 1.2 | ✅ | 2026-07-15 | Data-driven wave engine (td_waves.js) + 10-wave outpost table; full 10-wave headless cycle verified; both lanes path to HQ |
 | 1.3 | ☐ | | |
 | 1.4 | ☐ | | |
 | 2.1 | ☐ | | |
@@ -51,6 +51,13 @@ Plan: TOWER_DEFENSE_PLAN.md | Branch: claude/tower-defense-game-concept-ree0e6
 - 2026-07-15 | 1.1 | Stub tower roster (T0): GuardTower1, GuardTower-RotMg, Emplacement-MortarPit01, A0HardcreteMk1Wall, A0HardcreteMk1CWall, A0HardcreteMk1Gate — all IDs verified against data/mp/stats/structure.json | Initial roster per plan; full tier system in Legs 1.4/2.1.
 - 2026-07-15 | 1.1 | `setScrollLimits` not used | Map is 64×64 and fully played; nothing to crop.
 - 2026-07-15 | 1.1 | Truck template: explicit components Body1REC + wheeled01 + Spade1Mk1 (from templates.json `ConstructionDroid`) via addDroid | Matches libcampaign usage pattern.
+
+- 2026-07-15 | 1.2 | **Lane pathing: both lanes VALID.** propulsionCanReach = true for wheeled/tracked/hover on lane A (12,11) and lane B (7,58) → HQ (52,56); observed creep progress lane A distHQ 55→8, lane B 38→4; SIEGE creeps killed both player trucks (combat engagement confirmed). No spawn coordinate changes needed | Empirical, headless.
+- 2026-07-15 | 1.2 | **addDroid for player 1 needs NO research/components** — all 60 spawns across 10 waves succeeded with explicit body/prop/turret args (incl. Body10MBT + Rocket-HvyA-T boss units) and no makeComponentAvailable calls | Empirical; plan R3 risk retired.
+- 2026-07-15 | 1.2 | Harness-only CLEARED forcing: `tdDebugAutoClearSecs` global (default 0 = inert in real challenge), set to 60 by the tests shim only; when >0, live wave droids are force-removed after N ACTIVE seconds | No towers exist headlessly to kill creeps; this exercises the CLEARED→next-wave path. Marked HARNESS-ONLY in both files.
+- 2026-07-15 | 1.2 | **Engine DOES save/restore script timers and queued calls** (scriptstate.json version 2 — inspected a real save) — plan §2.3 "timers are not saved" is outdated. tdArmTimers() made idempotent via removeTimer() so re-arming in eventGameLoaded is safe either way | Save inspection of /savegames/skirmish/<name>/scriptstate.json.
+- 2026-07-15 | 1.2 | **Save/load verification status:** SAVE side verified headlessly — --saveandquit works from the harness; all td* globals + timers + queued calls correctly serialized (inspected). LOAD side CANNOT be verified headlessly: a --skirmish-launched save stores challengeFileName="" so --loadskirmish cannot re-create the custom rules script ("Script context ... not found") and falls back to DEFAULT rules — engine limitation of the tests path (matches the old comment in tests/test.sh). Real challenge saves store challengeFileName and re-create scripts.rules on load; that path is code-audited (src/game.cpp:4722, challenge loader) and flagged **desktop-pending** | Full detail in VERIFY.md §6.4.
+- 2026-07-15 | 1.2 | Spawn stagger implemented via per-droid queue("tdSpawnNext", delayMs) draining a saved plain-array; multiple queued calls of the same function work; drain design makes duplicate queueing harmless | Verified: spawn counts exactly match wave table (60 total).
 
 ## Known issues / deferred
 - Vulkan-Headers are auto-fetched by CMake at configure time (Ubuntu 24.04 ships v275 < required 290) — configure needs github.com git access.
