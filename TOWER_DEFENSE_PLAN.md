@@ -163,6 +163,21 @@ Warzone 2100 arsenal of defensive emplacements. Build, upgrade, and survive all 
   example). `"extra"` adds a script alongside default rules — we use `rules`.
   AI paths in challenges are given relative to the data root, e.g.
   `"multiplay/skirmish/nexus.js"` or `"challenges/foo.js"`.
+- **Verified in Leg 0.2:** `scripts.rules` values resolve relative to the
+  *launcher's* directory prefix (`challenges/` for challenge files, `tests/` for
+  `--skirmish` harness files, `autohost/` for autohost) — NOT the data root. So a
+  challenge JSON in `data/mp/challenges/` must use
+  `"rules": "towerdefense/td_rules.js"` (no `challenges/` prefix). The loader is
+  `loadMapChallengeAndPlayerSettings` in `src/multiint.cpp` (~line 555); when
+  `scripts.rules` is present, default rules (`multiplay/script/rules/init.js`)
+  are skipped entirely. `include()` inside scripts resolves data-root-relative
+  paths (e.g. `include("challenges/towerdefense/td_waves.js")`).
+- **Headless verification of challenge rules works** (Leg 0.2): put a harness
+  JSON in `data/mp/tests/` with the same `scripts.rules` (path `towerdefense/...`
+  relative resolution differs — from `tests/` use a one-line shim rules file that
+  `include()`s the real challenges-dir script) and run the VERIFY.md §6.3 TD
+  smoke test. Use `debug("...")` for headless-visible logging (stderr);
+  `console()` is player-facing only and invisible headlessly.
 - `"ai": null` on a player slot = no AI script; the slot is driven by our rules script.
 
 ### 2.5 Automated testing hooks (verified in `src/clparse.cpp`)
@@ -317,9 +332,11 @@ TOWER_DEFENSE_PLAN.md        # this file
 >    map from step 1, `maxPlayers` matching the map, `bases: 0`, `scavengers: 0`,
 >    `powerLevel/techLevel: 1`, player_0 = human team 0, player_1 = name "SIEGE",
 >    `"ai": null`, team 1; lock settings; `"scripts": { "rules":
->    "challenges/towerdefense/td_rules.js" }` (adjust path form to whatever the
->    loader actually resolves — test it; `doc/Scripting.md` §Challenges is the
->    reference).
+>    "towerdefense/td_rules.js" }` — path is relative to the `challenges/`
+>    prefix, verified empirically in Leg 0.2 (see plan §2.4). Also create the
+>    `data/mp/tests/` harness JSON + one-line shim rules file per §2.4 /
+>    VERIFY.md §6.3 so this and all later legs can smoke-test headlessly; use
+>    `debug()` for verification logging (`console()` is invisible headlessly).
 > 3. Create `data/mp/challenges/towerdefense/td_rules.js` + `td_maps.js` +
 >    `td_towers.js` (stubs ok for towers). In `eventStartLevel`:
 >    - `hackNetOff()` during bulk setup, `hackNetOn()` after (see how existing
