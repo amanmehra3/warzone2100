@@ -262,56 +262,79 @@ take effect on next launch with **no data rebuild**. (Alternative: rebuild
 `mp.wz` with `cmake --build build/native --target data_mp` and use
 `--datadir=$(pwd)/build/native/data`.)
 
-### 6.2 The canonical TD harness pattern (used by Sprint 1+ legs)
+### 6.2 The canonical TD harness (tracked files, created in Leg 1.1)
 
-Two small *tracked* harness files in `data/mp/tests/` (created in Sprint 1)
-mirror the real challenge but launch via `--skirmish`:
-- `data/mp/tests/td-harness.json` — copy of the challenge JSON with
-  `"scripts": { "rules": "td-harness_rules.js" }`.
+Two *tracked* harness files in `data/mp/tests/` mirror the real challenge but
+launch via `--skirmish`:
+- `data/mp/tests/td-harness.json` — mirrors `data/mp/challenges/td-outpost.json`
+  but with `"scripts": { "rules": "td-harness_rules.js" }`.
 - `data/mp/tests/td-harness_rules.js` — one-line shim:
   `include("challenges/towerdefense/td_rules.js");`
 
-This pattern was proven in Leg 0.2 with throwaway probes (deleted after): the
-shim's include executed the challenge-dir script at load time and its
-`eventStartLevel` fired.
+The pattern was proven in Leg 0.2 with throwaway probes and is now the
+committed harness: the shim's include executes the real challenge-dir rules
+script and all its events fire.
 
 ### 6.3 Canonical command + success markers
 
 ```sh
 rm -rf /tmp/wz-td-config && mkdir -p /tmp/wz-td-config
-timeout 120 ./build/native/src/warzone2100 \
+timeout 90 ./build/native/src/warzone2100 \
   --configdir=/tmp/wz-td-config \
   --datadir="$(pwd)/data" \
-  --skirmish=<harness-name>.json --autogame --headless --nosound \
+  --skirmish=td-harness.json --autogame --headless --nosound \
   2>&1 | tee /tmp/td-smoke.log
+grep "TD:" /tmp/td-smoke.log | head -20
 ```
 
-Success looks like (from the Leg 0.2 probe run; TD scripts must keep emitting
-equivalent `debug()` markers):
-1. Marker lines from the rules script on stderr, in order:
-   - top-level-executed marker (script parsed and run),
-   - `eventGameInit` marker,
-   - `eventStartLevel` marker,
-   - repeating timer-tick markers with strictly increasing `gameTime`
-     (proof the game loop and script timers are running).
-2. Near shutdown: `Destroying [0]:tests/<rules script>` (proof default rules
-   were replaced — with default rules this line reads
-   `Destroying [0]:multiplay/script/rules/init`).
-3. Exit code: `124` (timeout kill) is **expected and OK** while TD rules have
-   no win/lose implementation (probe gameplay never ends). Once Leg 1.3+ adds
-   end conditions and the harness game can conclude, expect `0`. Crash exit
-   codes (`134`, `139`) are always failures.
+Success = ALL of the following `TD:` markers on stderr (verified Leg 1.1):
+```
+TD: eventGameInit (rules=towerdefense/td_rules.js)
+TD: eventStartLevel
+TD: zeroed structure limits for 164 structure types
+TD: enabled 6 starting tower/wall types for player 0
+TD: cleared <N> structures / <N> droids for player 0     (and player 1)
+TD: timers armed
+TD: HQ placed at tile (52,56) id=<id>
+TD: truck 1 placed at tile (50,54) id=<id>
+TD: truck 2 placed at tile (55,58) id=<id>
+TD: spawn points configured: 2
+TD: power=1300 structLimitHQ=1 structLimitFactory=0 structLimitTower=100
+TD: setup complete
+TD: heartbeat tick=30 gameTime=30002        (repeating, gameTime increasing)
+```
+and NO lines matching `TD: ERROR`,
+`could not be built due to building limits`, or `Syntax error`.
+Usually the shutdown also logs `Destroying [0]:tests/td-harness_rules` (proof
+default rules were replaced), but the timeout kill can truncate shutdown
+logging — treat that line as informative, not required (the
+`rules=towerdefense/td_rules.js` marker already proves the same thing).
 
-Reference probe evidence (2026-07-15, throwaway files since deleted):
-```
-TD_PROBE: rules script top-level executed
-TD_PROBE: eventGameInit fired
-TD_PROBE: eventStartLevel fired; me=0 mapName=Sk-HighGround players=2
-TD_PROBE: tick at gameTime=5002
-...
-TD_PROBE: tick at gameTime=6380002
-info    |…: [~quickjs_scripting_instance:443] Destroying [0]:tests/td_probe_rules
-```
+Exit code: `124` (timeout kill) is **expected and OK** while TD rules have no
+win/lose implementation (the game never ends on its own). Once Leg 1.3+ adds
+end conditions, expect `0`. Crash exit codes (`134`, `139`) are always
+failures.
+
+Known-benign line in harness runs: one `Failed to load AI!` /
+`openLoadFile: file multiplay/skirmish/<garbage>` error — under `--autogame`
+the engine tries to auto-assign an AI to the human slot (player 0), which the
+harness JSON deliberately leaves AI-less to mirror the challenge. Player 0
+simply sits idle; all TD script activity proceeds.
+
+### 6.3.1 Engine behaviors the TD scripts must respect (found empirically, Leg 1.1)
+
+- **Limits reset after `eventGameInit`:** with a challenge active, the engine
+  resets structure limits to stats defaults (`userLimits`) after
+  `eventGameInit` → apply script limits in `eventStartLevel` or later.
+- **`applyLimitSet()` overwrites script limits** with the lobby limit set
+  (src/multilimit.cpp) → call it *before* imposing script limits.
+- **`Stats.Building` is keyed by display name**, not structure ID; use
+  `Stats.Building[key].Id` when calling `setStructureLimits` etc.
+- **`removeObject()` only queues removal** until the current script event
+  returns → `queue()` any `addStructure` that depends on a prior removal
+  (e.g. replacing the map's pre-placed HQ), and mind `curCount` vs limits.
+- **`addStructure()` respects structure limits** — a script cannot place a
+  structure whose limit is 0 for that player.
 
 ### 6.4 What can and cannot be verified headlessly (honest statement)
 

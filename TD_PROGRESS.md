@@ -6,7 +6,7 @@ Plan: TOWER_DEFENSE_PLAN.md | Branch: claude/tower-defense-game-concept-ree0e6
 |-----|--------|--------------|-------|
 | 0.1 | ✅ | 2026-07-14 | Native Ubuntu 24.04 build (Release, Ninja) + headless smoke test; see doc/tower-defense/VERIFY.md |
 | 0.2 | ✅ | 2026-07-15 | Lint recipe + headless custom-rules launch proven via `--skirmish` tests JSON; see VERIFY.md §5–§6 |
-| 1.1 | ☐ | | |
+| 1.1 | ✅ | 2026-07-15 | td-outpost challenge + td_rules/td_maps/td_towers on Sk-UrbanChasm; committed headless harness (td-harness.json); verified per VERIFY.md §6.3 |
 | 1.2 | ☐ | | |
 | 1.3 | ☐ | | |
 | 1.4 | ☐ | | |
@@ -41,6 +41,16 @@ Plan: TOWER_DEFENSE_PLAN.md | Branch: claude/tower-defense-game-concept-ree0e6
 - 2026-07-15 | 0.2 | Harness pattern for later legs: tracked `data/mp/tests/td-harness.json` + one-line shim rules file that does `include("challenges/towerdefense/td_rules.js")`; `include()` resolves data-root-relative paths first (src/wzapi.cpp loadFileForInclude) — proven with probes | Lets the headless harness exercise the *real* challenge scripts without duplicating them.
 - 2026-07-15 | 0.2 | `--datadir="$(pwd)/data"` (loose source tree) works for the headless harness — the engine mounts plain `mp/`/`base/` dirs as well as `.wz` archives — so TD script edits need no data rebuild | Faster iteration than re-zipping mp.wz each run.
 - 2026-07-15 | 0.2 | JS `console()` is invisible headlessly (in-game console only); TD scripts must use `debug()` markers for harness verification | `debug()` writes to stderr (src/wzapi.cpp debugOutputStrings).
+
+- 2026-07-15 | 1.1 | Map choice: **Sk-UrbanChasm** (2p, 64×64, urban, chasm chokepoints). HQ tile (52,56) (= map start pos 0), trucks (50,54)/(55,58), spawns (12,11) (= start pos 1) and (7,58) (open derrick ground). Coordinates probed empirically (headless startPositions/derrickPositions dump) | Plan's candidates rejected: 2c-DustyMaze is a script-*generated* random maze (no fixed coordinates possible); Sk-MizaMaze is 8-player, not 2–4. Spawn pathability to HQ will be validated by the wave engine in Leg 1.2.
+- 2026-07-15 | 1.1 | Challenge JSON uses `"bases": 1` (not plan's `bases: 0`) | JSON bases is 1-based (`game.base = value - 1` in src/multiint.cpp): 1 = clean base. 0 would underflow to -1.
+- 2026-07-15 | 1.1 | Power modifier left at engine default (100); no `setPowerModifier(0,0)` | With zero oil derricks owned there is no engine passive income at all; TD economy (Leg 1.3) grants power directly via setPower(). Verified: power stays exactly 1300 during idle harness run.
+- 2026-07-15 | 1.1 | Limits/board setup runs in `eventStartLevel` (+1 queued tick), NOT `eventGameInit` as plan suggested | Engine resets structure limits to stats defaults after eventGameInit when a challenge is active; also removeObject() is deferred, so HQ placement must happen a tick after clearing the map's pre-placed base. Both found empirically; documented in VERIFY.md §6.3.1.
+- 2026-07-15 | 1.1 | `Stats.Building` is keyed by display name; use `.Id` for setStructureLimits | Zeroing by key silently failed (164 "not found" errors). Documented in VERIFY.md §6.3.1.
+- 2026-07-15 | 1.1 | HQ (A0CommandCentre) structure limit set to 1, never enableStructure()d | addStructure() respects limits, so limit 0 blocked our own HQ placement; limit 1 lets the script place it while the player cannot build one (no availability).
+- 2026-07-15 | 1.1 | Stub tower roster (T0): GuardTower1, GuardTower-RotMg, Emplacement-MortarPit01, A0HardcreteMk1Wall, A0HardcreteMk1CWall, A0HardcreteMk1Gate — all IDs verified against data/mp/stats/structure.json | Initial roster per plan; full tier system in Legs 1.4/2.1.
+- 2026-07-15 | 1.1 | `setScrollLimits` not used | Map is 64×64 and fully played; nothing to crop.
+- 2026-07-15 | 1.1 | Truck template: explicit components Body1REC + wheeled01 + Spade1Mk1 (from templates.json `ConstructionDroid`) via addDroid | Matches libcampaign usage pattern.
 
 ## Known issues / deferred
 - Vulkan-Headers are auto-fetched by CMake at configure time (Ubuntu 24.04 ships v275 < required 290) — configure needs github.com git access.

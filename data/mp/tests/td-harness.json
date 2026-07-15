@@ -1,0 +1,27 @@
+{
+	"challenge": {
+		"alliances": 2,
+		"bases": 1,
+		"description": "Headless test harness for Siege Protocol: Outpost (see doc/tower-defense/VERIFY.md section 6).",
+		"difficulty": "Medium",
+		"map": "Sk-UrbanChasm",
+		"maxPlayers": 2,
+		"name": "TD Harness: Outpost",
+		"powerLevel": 1,
+		"scavengers": 0,
+		"techLevel": 1,
+		"version": 2
+	},
+	"scripts": {
+		"rules": "td-harness_rules.js"
+	},
+	"player_0": {
+		"team": 0
+	},
+	"player_1": {
+		"ai": null,
+		"difficulty": "Medium",
+		"name": "SIEGE",
+		"team": 1
+	}
+}

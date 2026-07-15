@@ -1,0 +1,246 @@
+// Siege Protocol — custom rules script (replaces multiplay/script/rules entirely).
+// Referenced from challenge JSON as: "scripts": { "rules": "towerdefense/td_rules.js" }
+// (resolved relative to challenges/ — see doc/tower-defense/VERIFY.md §6.1).
+//
+// Savegame rules honored throughout (doc/Scripting.md):
+// - all globals case-insensitively unique
+// - no game objects stored in globals (IDs / plain types only)
+// - consts hold static config only (consts are NOT saved)
+// - every timer re-armed from eventGameLoaded (timers are not saved)
+
+include("challenges/towerdefense/td_maps.js");
+include("challenges/towerdefense/td_towers.js");
+
+// Receive events for all players' objects (needed for creep tracking in later legs).
+receiveAllEvents(true);
+
+// ---------------------------------------------------------------- static config
+const tdConfig = {
+	humanPlayer: 0,     // design decision D1
+	siegePlayer: 1,     // design decision D1 ("SIEGE", script-driven, ai: null)
+	startingPower: 1300, // tunable
+	truckLimit: 2,      // no unit production, ever
+	masterTickMs: 1000, // 1s master tick (wave engine hooks in here in Leg 1.2)
+	heartbeatTicks: 30  // debug heartbeat every N ticks (headless verification)
+};
+
+// ---------------------------------------------------------------- mutable state
+// (plain types only; saved/restored by the engine)
+var tdHqId = 0;         // id of the player's Command Center (0 = not placed yet)
+var tdSetupDone = false; // guards against double setup
+var tdTickCount = 0;    // master tick counter
+
+// ---------------------------------------------------------------- UX setup
+
+// Build-only reticule: Close + Build live; everything else present but inert
+// (empty image names render the button unavailable, mirroring default reticule.js).
+function tdSetReticule()
+{
+	setReticuleButton(0, _("Close"), "image_cancel_up.png", "image_cancel_down.png");
+	setReticuleButton(1, _("Manufacture - unavailable in Siege Protocol"), "", "");
+	setReticuleButton(2, _("Research - unavailable in Siege Protocol"), "", "");
+	if (enumDroid(selectedPlayer, DROID_CONSTRUCT).length > 0)
+	{
+		setReticuleButton(3, _("Build (F3)"), "image_build_up.png", "image_build_down.png");
+	}
+	else
+	{
+		setReticuleButton(3, _("Build - no trucks left"), "", "");
+	}
+	setReticuleButton(4, _("Design - unavailable in Siege Protocol"), "", "");
+	setReticuleButton(5, _("Intelligence Display - unavailable in Siege Protocol"), "", "");
+	setReticuleButton(6, _("Commanders - unavailable in Siege Protocol"), "", "");
+}
+
+function tdSetupUx()
+{
+	setRevealStatus(true); // light fog, as in default multiplayer rules
+	if (tilesetType === "ARIZONA")
+	{
+		setCampaignNumber(1);
+	}
+	else if (tilesetType === "URBAN")
+	{
+		setCampaignNumber(2);
+	}
+	else if (tilesetType === "ROCKIES")
+	{
+		setCampaignNumber(3);
+	}
+	if (tilesetType !== "ARIZONA")
+	{
+		setSky("texpages/page-25-sky-urban.png", 0.5, 10000.0);
+	}
+	setDesign(false);   // no unit design, ever
+	setMiniMap(true);   // player has an HQ from the start
+	showInterface();    // must precede reticule button setup
+	queue("tdSetReticule", 100);
+}
+
+// ---------------------------------------------------------------- limits & power
+
+function tdApplyLimits()
+{
+	// Zero every structure limit for the human player, then whitelist towers/walls.
+	// Stats.Building is keyed by DISPLAY NAME; the engine-usable structure ID is
+	// in the .Id property (setStructureLimits requires IDs — found empirically).
+	const allBuildings = Object.keys(Stats.Building);
+	for (let i = 0; i < allBuildings.length; ++i)
+	{
+		setStructureLimits(Stats.Building[allBuildings[i]].Id, 0, tdConfig.humanPlayer);
+	}
+	debug("TD: zeroed structure limits for " + allBuildings.length + " structure types");
+	// The HQ needs limit 1 so our own addStructure() below can place it
+	// (addStructure respects limits — found empirically). It is never
+	// enableStructure()d, so the player still cannot build one.
+	setStructureLimits("A0CommandCentre", 1, tdConfig.humanPlayer);
+	tdEnableStartingTowers(tdConfig.humanPlayer);
+
+	// No unit production is possible (no factories), but belt-and-braces:
+	setDroidLimit(tdConfig.humanPlayer, tdConfig.truckLimit, DROID_ANY);
+	setDroidLimit(tdConfig.humanPlayer, tdConfig.truckLimit, DROID_CONSTRUCT);
+	setDroidLimit(tdConfig.humanPlayer, 0, DROID_COMMAND);
+
+	setPower(tdConfig.startingPower, tdConfig.humanPlayer);
+	// Power modifier left at engine default (100). With no oil derricks owned
+	// there is no passive engine income anyway; the TD economy (Leg 1.3) grants
+	// power directly via setPower(). Decision logged in TD_PROGRESS.md.
+}
+
+// ---------------------------------------------------------------- board setup
+
+function tdClearPlayerObjects(player)
+{
+	const oldStructs = enumStruct(player);
+	for (let i = 0; i < oldStructs.length; ++i)
+	{
+		removeObject(oldStructs[i]);
+	}
+	const oldDroids = enumDroid(player);
+	for (let j = 0; j < oldDroids.length; ++j)
+	{
+		removeObject(oldDroids[j]);
+	}
+	debug("TD: cleared " + oldStructs.length + " structures / " + oldDroids.length + " droids for player " + player);
+}
+
+// Runs one tick after eventStartLevel: removeObject() only queues removals
+// (src/wzapi.cpp scriptQueuedObjectRemovals), so the map's pre-placed HQ still
+// counts against the limit until the clearing event returns (found empirically).
+function tdPlaceStartingBoard()
+{
+	if (!tdMapDef)
+	{
+		debug("TD: ERROR - no map config for \"" + mapName + "\" in td_maps.js");
+		return;
+	}
+	hackNetOff();
+
+	const hqStruct = addStructure("A0CommandCentre", tdConfig.humanPlayer, tdMapDef.hq.x * 128, tdMapDef.hq.y * 128);
+	if (hqStruct)
+	{
+		tdHqId = hqStruct.id;
+		debug("TD: HQ placed at tile (" + tdMapDef.hq.x + "," + tdMapDef.hq.y + ") id=" + tdHqId);
+	}
+	else
+	{
+		debug("TD: ERROR - failed to place HQ at (" + tdMapDef.hq.x + "," + tdMapDef.hq.y + ")");
+	}
+
+	for (let i = 0; i < tdMapDef.trucks.length; ++i)
+	{
+		const spot = tdMapDef.trucks[i];
+		const truck = addDroid(tdConfig.humanPlayer, spot.x, spot.y, _("Truck"),
+			"Body1REC", "wheeled01", "", "", "Spade1Mk1");
+		if (truck)
+		{
+			debug("TD: truck " + (i + 1) + " placed at tile (" + spot.x + "," + spot.y + ") id=" + truck.id);
+		}
+		else
+		{
+			debug("TD: ERROR - failed to place truck at (" + spot.x + "," + spot.y + ")");
+		}
+	}
+
+	debug("TD: spawn points configured: " + tdMapDef.spawns.length);
+	centreView(tdMapDef.hq.x, tdMapDef.hq.y);
+	debug("TD: power=" + playerPower(tdConfig.humanPlayer) +
+		" structLimitHQ=" + getStructureLimit("A0CommandCentre", tdConfig.humanPlayer) +
+		" structLimitFactory=" + getStructureLimit("A0LightFactory", tdConfig.humanPlayer) +
+		" structLimitTower=" + getStructureLimit("GuardTower1", tdConfig.humanPlayer));
+	hackNetOn();
+	queue("tdSetReticule", 100);
+	debug("TD: setup complete");
+}
+
+// ---------------------------------------------------------------- timers
+
+// All timers are armed here, and ONLY here — called from both eventStartLevel
+// and eventGameLoaded (timers do not survive save/load).
+function tdArmTimers()
+{
+	setTimer("tdMasterTick", tdConfig.masterTickMs);
+	debug("TD: timers armed");
+}
+
+function tdMasterTick()
+{
+	tdTickCount += 1;
+	// Wave engine state machine hooks in here (Leg 1.2).
+	if (tdTickCount % tdConfig.heartbeatTicks === 0)
+	{
+		debug("TD: heartbeat tick=" + tdTickCount + " gameTime=" + gameTime);
+	}
+}
+
+// ---------------------------------------------------------------- events
+
+function eventGameInit()
+{
+	debug("TD: eventGameInit (rules=towerdefense/td_rules.js)");
+	tdSetupUx();
+}
+
+function eventStartLevel()
+{
+	debug("TD: eventStartLevel");
+	if (tdSetupDone)
+	{
+		debug("TD: setup already done, skipping");
+		return;
+	}
+	hackNetOff();
+	// NOTE: limits are applied here (not in eventGameInit): with an active
+	// challenge the engine resets structure limits to their stats defaults
+	// after eventGameInit, which silently reverted them (found empirically in
+	// Leg 1.1). applyLimitSet() runs first because it overwrites script-set
+	// limits with the lobby limit set (src/multilimit.cpp).
+	applyLimitSet();
+	tdApplyLimits();
+	// Engine-placed starting units depend on map + bases setting; normalize to
+	// exactly: our HQ + our two trucks (player 0), nothing at all (player 1).
+	tdClearPlayerObjects(tdConfig.humanPlayer);
+	tdClearPlayerObjects(tdConfig.siegePlayer);
+	hackNetOn();
+	tdSetupDone = true;
+	tdArmTimers();
+	// Removals above are only queued; place our board next tick.
+	queue("tdPlaceStartingBoard", 100);
+}
+
+function eventGameLoaded()
+{
+	debug("TD: eventGameLoaded - re-arming timers");
+	tdSetupUx();
+	tdArmTimers();
+}
+
+// Keep the Build button truthful if the player loses trucks.
+function eventDestroyed(gameObject)
+{
+	if (gameObject.type === DROID && gameObject.player === tdConfig.humanPlayer)
+	{
+		queue("tdSetReticule", 100);
+	}
+	// HQ-destroyed defeat handling arrives with the economy leg (1.3).
+}
