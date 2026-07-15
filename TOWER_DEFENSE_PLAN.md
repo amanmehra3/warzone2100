@@ -146,6 +146,16 @@ Warzone 2100 arsenal of defensive emplacements. Build, upgrade, and survive all 
 
 ### 2.3 Scripting gotchas (from `doc/Scripting.md` — violating these causes savegame bugs)
 - **Global variables must be case-insensitively unique** (savegame collision bug).
+- **Correction (verified Leg 1.2):** script timers AND queued calls ARE saved and
+  restored (scriptstate version 2) — earlier "timers are not saved" notes in this
+  plan are outdated. Keep timer arming idempotent anyway (`removeTimer` then
+  `setTimer` in a shared arm function called from both `eventStartLevel` and
+  `eventGameLoaded`) — it is safe under both behaviors.
+- **Save/load verification limits (Leg 1.2):** `--saveandquit` works headlessly and
+  `scriptstate.json` can be inspected; but loading a `--skirmish`-launched save
+  cannot re-create custom rules (`challengeFileName` is empty on the tests path) —
+  the real challenge-save load path (src/game.cpp ~4722) is code-audited and must
+  be confirmed in a desktop/GUI session (tracked for Leg 1.4/6.1).
 - **Never store game objects (droids/structures) in globals** — store IDs/positions
   and re-`enum` instead. Globals of basic types/arrays are saved & restored.
 - `const` is NOT saved in savegames — use consts for static config (good: our wave
@@ -807,7 +817,7 @@ Plan: TOWER_DEFENSE_PLAN.md | Branch: claude/tower-defense-game-concept-ree0e6
 |---|---|---|---|
 | R1 | Challenge `scripts.rules` path resolution differs from doc example | Medium | Leg 0.2/1.1 test it empirically before building on it; `hidebehind.json` + `src/challenge.cpp` are ground truth |
 | R2 | Headless challenge testing impossible → slower verification | Medium | Leg 0.2 establishes honest best-available recipe; legs verify via real game session with logging |
-| R3 | `addDroid` creeps require research/components for player 1 | Low | Leg 1.2 checks; fallback `makeComponentAvailable`/`completeResearch` for player 1 |
+| R3 | ~~`addDroid` creeps require research/components for player 1~~ **RETIRED (Leg 1.2):** no research needed — 60/60 spawns incl. boss bodies worked | — | — |
 | R4 | VTOL creep waves misbehave without full VTOL infrastructure | Medium | Leg 2.2 explicitly allows substituting hover strikers; log decision |
 | R5 | Web build too heavy for low-end phones (RAM/WebGL2) | High | Leg 4.3 + 5.4 perf passes; small maps, capped wave sizes; document minimum device class honestly |
 | R6 | Emscripten toolchain build fails in container (network/toolchain pins) | Medium | Reuse exact pins from `CI_emscripten.yml`; CI (Leg 4.2) is the fallback build environment |
