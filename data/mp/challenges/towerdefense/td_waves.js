@@ -55,6 +55,7 @@ function tdStartBuildPhase()
 	tdWaveState = "BUILD";
 	tdBuildSecsLeft = nextWave.delay;
 	tdActiveSecs = 0;
+	tdCheckTierUnlocks(tdWaveNum + 1); // tier milestones (td_towers.js)
 	debug("TD-WAVE: BUILD phase for wave " + (tdWaveNum + 1) + "/" + tdMapDef.waves.length +
 		" (" + tdBuildSecsLeft + "s)");
 	tdAnnounce(_("Wave") + " " + (tdWaveNum + 1) + " " + _("incoming in") + " " + tdBuildSecsLeft + "s");
@@ -74,7 +75,9 @@ function tdBeginWave()
 	for (let g = 0; g < wave.groups.length; ++g)
 	{
 		const group = wave.groups[g];
-		for (let c = 0; c < group.count; ++c)
+		// Difficulty multiplier: ceil, min 1 per group (td_rules.js tdDifficulty).
+		const scaledCount = Math.max(1, Math.ceil(group.count * tdDiff().creepMult));
+		for (let c = 0; c < scaledCount; ++c)
 		{
 			tdPendingSpawns.push({
 				name: group.template.name,
@@ -141,8 +144,7 @@ function tdOnWaveCleared()
 		" (" + _("bounty:") + " " + tdWaveBounty + ", " + _("lives:") + " " + tdLives + ")");
 	if (tdWaveNum >= tdMapDef.waves.length)
 	{
-		tdWaveState = "DONE";
-		debug("TD-WAVE: all " + tdWaveNum + " waves finished (victory logic arrives in Leg 1.4)");
+		tdVictory(); // all waves survived (td_economy.js)
 		return;
 	}
 	tdStartBuildPhase();

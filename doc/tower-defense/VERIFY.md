@@ -344,6 +344,11 @@ once per creep). The power values are exact: +2/s during BUILD ticks only
 rewards — any drift means the economy broke. Exit `124` now indicates a
 hang/regression; `134`/`139` are crashes.
 
+Since Leg 1.4 the run also shows tier unlock markers:
+`TD-TIER: tier 0 enabled (starting defenses): 4 structure types` at setup and
+`TD-TIER: tier 1 enabled (...)` at the wave-3 BUILD phase (the defeat run
+never reaches tiers 2/3).
+
 **Knob variants (temporary local edits to `td-harness_rules.js`, do not
 commit):**
 - *Bounty path:* add `tdDebugPlaceTowers = 2;` — places two guard towers
@@ -354,6 +359,22 @@ commit):**
 - *HQ-destroyed path:* add `tdDebugKillHqTick = 150;` — expect
   `TD-ECO: HARNESS killing HQ id=...` then `TD-ECO: DEFEAT (hq destroyed)`
   with lives still > 0, and exit 0.
+- *Victory path:* change `tdDebugAutoClearSecs = 60;` to `10` — creeps are
+  cleared before reaching the HQ, all 10 waves pass, all four tiers unlock
+  (`TD-TIER: tier 1/2/3 enabled` at waves 3/5/8) and the run ends
+  `TD-ECO: VICTORY after wave 10 lives=20 power=5788` with exit 0.
+- *Unlock functionality:* add `tdDebugPlaceUnlocked = 1;` with
+  `tdDebugAutoClearSecs = 40;` — each newly unlocked tier is also
+  script-placed on the lane-B flank (`TD-TIER: HARNESS test-place <id> ...
+  OK`), and tier-1 towers score attributable combat kills (`TD-ECO: bounty`
+  lines only after the wave-3 unlock). Tier-2/3 kill attribution is NOT
+  achievable headlessly (artillery/heavy-AT vs fast light movers within the
+  leak-timing window) — placement + enablement verify headlessly; their
+  damage output needs the desktop playtest.
+- *Difficulty multiplier:* temporarily set `difficultyKey: "hard"` in
+  `td_rules.js` tdConfig — expect `lives initialized to 12 (hard)`, starting
+  `power=1100`, and scaled spawn counts (`wave 1 SPAWNING, 6 creeps` =
+  ceil(4x1.3); wave 2: 8 = 2 groups x ceil(3x1.3)).
 
 Known-benign line in harness runs: one `Failed to load AI!` /
 `openLoadFile: file multiplay/skirmish/<garbage>` error — under `--autogame`

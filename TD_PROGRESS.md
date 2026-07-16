@@ -9,7 +9,7 @@ Plan: TOWER_DEFENSE_PLAN.md | Branch: claude/tower-defense-game-concept-ree0e6
 | 1.1 | ✅ | 2026-07-15 | td-outpost challenge + td_rules/td_maps/td_towers on Sk-UrbanChasm; committed headless harness (td-harness.json); verified per VERIFY.md §6.3 |
 | 1.2 | ✅ | 2026-07-15 | Data-driven wave engine (td_waves.js) + 10-wave outpost table; full 10-wave headless cycle verified; both lanes path to HQ |
 | 1.3 | ✅ | 2026-07-16 | Economy/lives/defeat (td_economy.js); all four paths verified headlessly (leak, lives-defeat exit 0, HQ-defeat, bounty, exact passive income) |
-| 1.4 | ☐ | | |
+| 1.4 | ✅ | 2026-07-16 | Victory, tier unlocks (waves 3/5/8), difficulty knobs, §2.3 audit. **Sprint 1 complete: td-outpost is winnable, losable, save-safe** |
 | 2.1 | ☐ | | |
 | 2.2 | ☐ | | |
 | 2.3 | ☐ | | |
@@ -65,6 +65,12 @@ Plan: TOWER_DEFENSE_PLAN.md | Branch: claude/tower-defense-game-concept-ree0e6
 - 2026-07-16 | 1.3 | **Exit behavior after gameOverMessage(false): headless autogame quits with exit code 0** ("Autogame completed successfully!" path in wzapi.cpp). Canonical harness run is now a deterministic pure-leak defeat: 20 leaks, DEFEAT (lives exhausted) in wave 4, exit 0 — reproduced 3x with identical numbers | VERIFY.md §6.3 updated.
 - 2026-07-16 | 1.3 | Harness knobs added (all inert by default): tdDebugPlaceTowers (place flanking guard towers → deterministic combat kills for the bounty path) and tdDebugKillHqTick (force HQ-destroyed defeat path). Both exercised this leg via temporary uncommitted shim edits, documented in VERIFY.md | Committed shim keeps only tdDebugAutoClearSecs=60.
 - 2026-07-16 | 1.3 | **Design finding for Legs 2.x:** structures placed ON a lane tile block the corridor and attack-move creeps stall out of weapon range with no shots fired (they do NOT siege blockers). Harness towers therefore flank the lane. Real-game implication: players could stall creeps by fully walling a chokepoint — needs a stuck-creep response (e.g. order attack on nearest blocking structure) in the balance/QA legs | Logged as deferred work below.
+
+- 2026-07-16 | 1.4 | **Final Sprint-1 const values:** tdDifficulty = easy {lives 30, power 1600, mult 0.8} / medium {20, 1300, 1.0} / hard {12, 1100, 1.3}; bounty table per 1.3 entry (10-50 by body, default 10); passive income +2/s BUILD only; leakRadius 3 / beelineRadius 12; wave rewards 150-800; tier unlock waves 0/3/5/8. td-outpost = medium. No cheat consts in committed files (all tdDebug* knobs = 0/60-autoclear-shim-only) | Balance pass in Leg 2.3.
+- 2026-07-16 | 1.4 | Tier roster v0: T0 GuardTower1 + walls/gate; W3 GuardTower-RotMg, PillBox4, GuardTower4, AASite-QuadMg1; W5 Emplacement-MortarPit01, Emplacement-MRL-pit, GuardTower5; W8 Emplacement-HvyATrocket, Emplacement-PulseLaser (all IDs verified). **Research chains NOT needed for function** — enabled structures build and fire with base stats (empirical: tier-1 kills with zero research completed); upgrade research deferred to Leg 2.1 | Plan's completeResearch contingency unused.
+- 2026-07-16 | 1.4 | Unlock verification: all 9 unlock towers place OK post-unlock; tier-1 kills attributed (bounty only after wave-3 unlock). **Tier-2/3 kill attribution not achievable headlessly** (artillery/heavy AT vs fast movers within leak timing) — desktop-pending | VERIFY.md knob variant documents the recipe.
+- 2026-07-16 | 1.4 | §2.3 audit results: 56 globals, zero case-insensitive collisions, no for..in over arrays, no Set/Map (id-sets are plain objects), no game objects in globals, consts static-only. Fixes made: eventGameLoaded now (a) skips timer re-arm when tdGameEnded, (b) defensively re-enables all unlocked tiers (availability persistence across save/load unproven). All 19 td* globals confirmed serialized in scriptstate.json | Save inspected via --saveandquit.
+- 2026-07-16 | 1.4 | **--saveandquit fires at TRIGGER_START_LEVEL only** (src/qtscript.cpp:1431) — mid-wave/BUILD-phase headless saves impossible; autosave is disabled under autogame. Mid-game save/load remains desktop-pending (load path additionally limited per Leg 1.2 finding) | Honest limitation, documented.
 
 ## Known issues / deferred
 - Stuck-creep response when a lane is fully walled off (creeps currently stall out of range instead of attacking blockers) — address in Leg 2.3 balance/QA (see 1.3 Decision Log).

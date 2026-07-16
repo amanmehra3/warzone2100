@@ -20,13 +20,25 @@ receiveAllEvents(true);
 const tdConfig = {
 	humanPlayer: 0,     // design decision D1
 	siegePlayer: 1,     // design decision D1 ("SIEGE", script-driven, ai: null)
-	startingPower: 1300, // tunable
 	truckLimit: 2,      // no unit production, ever
 	masterTickMs: 1000, // 1s master tick (drives the wave engine)
 	heartbeatTicks: 30, // debug heartbeat every N ticks (headless verification)
 	reorderSecs: 10,    // re-issue attack-move to non-fighting creeps every N s
-	difficultyKey: "medium" // selects lives from tdEconomy.livesTable (td-outpost = Medium)
+	difficultyKey: "medium" // selects the tdDifficulty row (td-outpost = Medium)
 };
+
+// Difficulty knobs (Leg 1.4). lives = starting lives; startingPower = initial
+// power; creepMult = wave group count multiplier (ceil, min 1 per group).
+const tdDifficulty = {
+	easy: { lives: 30, startingPower: 1600, creepMult: 0.8 },
+	medium: { lives: 20, startingPower: 1300, creepMult: 1.0 },
+	hard: { lives: 12, startingPower: 1100, creepMult: 1.3 }
+};
+
+function tdDiff()
+{
+	return tdDifficulty[tdConfig.difficultyKey] || tdDifficulty.medium;
+}
 
 // ---------------------------------------------------------------- mutable state
 // (plain types only; saved/restored by the engine)
@@ -98,14 +110,16 @@ function tdApplyLimits()
 	// (addStructure respects limits — found empirically). It is never
 	// enableStructure()d, so the player still cannot build one.
 	setStructureLimits("A0CommandCentre", 1, tdConfig.humanPlayer);
-	tdEnableStartingTowers(tdConfig.humanPlayer);
+	// Enable tier 0 (starting towers/walls) now, inside the hackNetOff block;
+	// later tiers unlock at waves 3/5/8 via tdCheckTierUnlocks (td_towers.js).
+	tdCheckTierUnlocks(0);
 
 	// No unit production is possible (no factories), but belt-and-braces:
 	setDroidLimit(tdConfig.humanPlayer, tdConfig.truckLimit, DROID_ANY);
 	setDroidLimit(tdConfig.humanPlayer, tdConfig.truckLimit, DROID_CONSTRUCT);
 	setDroidLimit(tdConfig.humanPlayer, 0, DROID_COMMAND);
 
-	setPower(tdConfig.startingPower, tdConfig.humanPlayer);
+	setPower(tdDiff().startingPower, tdConfig.humanPlayer);
 	// Power modifier left at engine default (100). With no oil derricks owned
 	// there is no passive engine income anyway; the TD economy (Leg 1.3) grants
 	// power directly via setPower(). Decision logged in TD_PROGRESS.md.
@@ -250,6 +264,17 @@ function eventGameLoaded()
 	debug("TD: eventGameLoaded - re-arming timers, waveState=" + tdWaveState +
 		" wave=" + tdWaveNum + " pendingSpawns=" + tdPendingSpawns.length);
 	tdSetupUx();
+	if (tdGameEnded)
+	{
+		removeTimer("tdMasterTick"); // finished game: nothing left to drive
+		return;
+	}
+	// Defensively re-enable every unlocked tier (structure availability may
+	// not fully persist through save/load; idempotent).
+	for (let t = 0; t < tdTiersUnlocked; ++t)
+	{
+		tdEnableTier(t, tdConfig.humanPlayer);
+	}
 	tdArmTimers();
 	// The engine restores queued calls too (Leg 1.2 finding), but re-queueing
 	// pending spawns is harmless: tdSpawnNext() drains a shared array and

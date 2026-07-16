@@ -23,8 +23,8 @@ const tdEconomy = {
 		"Body9REC": 30,   // Tiger
 		"Body7ABT": 40,   // Retribution
 		"Body10MBT": 50   // Vengeance
-	},
-	livesTable: { easy: 30, medium: 20, hard: 12 }
+	}
+	// lives / startingPower / creepMult live in tdDifficulty (td_rules.js)
 };
 
 // ---------------------------------------------------------------- state (saved)
@@ -41,7 +41,7 @@ var tdDebugKillHqTick = 0;    // >0: removeObject() the HQ at this master tick
 
 function tdInitLives()
 {
-	tdLives = tdEconomy.livesTable[tdConfig.difficultyKey] || 20;
+	tdLives = tdDiff().lives;
 	debug("TD-ECO: lives initialized to " + tdLives + " (" + tdConfig.difficultyKey + ")");
 }
 
@@ -57,6 +57,21 @@ function tdDefeat(reason)
 	debug("TD-ECO: DEFEAT (" + reason + ") wave=" + tdWaveNum + " lives=" + tdLives);
 	tdAnnounce(_("The SIEGE has overrun your outpost."));
 	gameOverMessage(false);
+}
+
+function tdVictory()
+{
+	if (tdGameEnded)
+	{
+		return;
+	}
+	tdGameEnded = true;
+	tdWaveState = "DONE";
+	removeTimer("tdMasterTick");
+	debug("TD-ECO: VICTORY after wave " + tdWaveNum + " lives=" + tdLives +
+		" power=" + playerPower(tdConfig.humanPlayer));
+	tdAnnounce(_("The SIEGE is broken. Your outpost stands!"));
+	gameOverMessage(true);
 }
 
 // ---------------------------------------------------------------- bounty
