@@ -172,6 +172,14 @@ Warzone 2100 arsenal of defensive emplacements. Build, upgrade, and survive all 
   (affects leak removal in Leg 1.3: a leaked creep may still be enumerable the
   same tick); (5) `addStructure()` respects structure limits — keep script-placed
   structures (HQ) at limit 1 without `enableStructure` so players can't build them.
+- **Verified in Leg 1.3:** `removeObject()` DOES fire `eventDestroyed` — any
+  script-initiated removal must be excluded from kill-reward logic (TD uses a
+  `tdNoBountyIds` set marked before every removal). Attack-move creeps besiege
+  the HQ from weapon range (4–9 tiles) and never enter a small leak radius on
+  their own — creeps within 12 tiles of the HQ are switched to `DORDER_MOVE`
+  into it. After `gameOverMessage()`, headless autogame exits 0
+  ("Autogame completed successfully!") — the canonical smoke test expects exit 0
+  once win/lose logic exists; 124 (timeout) signals a regression.
 
 ### 2.4 Challenge file mechanics
 - Challenge JSON fields (see `data/mp/challenges/hidebehind.json` for a live example):
@@ -825,6 +833,7 @@ Plan: TOWER_DEFENSE_PLAN.md | Branch: claude/tower-defense-game-concept-ree0e6
 | R8 | Savegame corruption from script globals | Medium | §2.3 gotchas embedded in every scripting leg + dedicated audit in Leg 1.4 and QA in 6.1 |
 | R9 | GitHub Pages needs repo-settings action only the user can do | High | Leg 4.2 reports the exact click required instead of stalling |
 | R10 | Upstream `master` moves under us | Low | Fork branch is self-contained; no rebases needed until/unless upstreaming |
+| R11 | (Found in Leg 1.3) Structures placed ON a lane tile block the corridor; creeps stall out of range and do NOT attack blockers — mazing/walling can soft-lock a wave | High | Leg 2.3 + QA must add a stuck-creep response (e.g. periodic stall detector orders `DORDER_ATTACK` on the nearest blocking structure, or leak-credits stalled creeps); until then wave tables/maps must keep lanes wide |
 
 ---
 
