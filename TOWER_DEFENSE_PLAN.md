@@ -151,11 +151,13 @@ Warzone 2100 arsenal of defensive emplacements. Build, upgrade, and survive all 
   plan are outdated. Keep timer arming idempotent anyway (`removeTimer` then
   `setTimer` in a shared arm function called from both `eventStartLevel` and
   `eventGameLoaded`) — it is safe under both behaviors.
-- **Save/load verification limits (Leg 1.2):** `--saveandquit` works headlessly and
-  `scriptstate.json` can be inspected; but loading a `--skirmish`-launched save
-  cannot re-create custom rules (`challengeFileName` is empty on the tests path) —
-  the real challenge-save load path (src/game.cpp ~4722) is code-audited and must
-  be confirmed in a desktop/GUI session (tracked for Leg 1.4/6.1).
+- **Save/load verification limits (Leg 1.2/1.4):** `--saveandquit` works headlessly
+  and `scriptstate.json` can be inspected — but it fires at TRIGGER_START_LEVEL
+  only (`src/qtscript.cpp:1431`) and autosave is off under autogame, so mid-game
+  headless saves are impossible; and loading a `--skirmish`-launched save cannot
+  re-create custom rules (`challengeFileName` is empty on the tests path) — the
+  real challenge-save load path (src/game.cpp ~4722) is code-audited and must be
+  confirmed in a desktop/GUI session (tracked for QA Leg 6.1).
 - **Never store game objects (droids/structures) in globals** — store IDs/positions
   and re-`enum` instead. Globals of basic types/arrays are saved & restored.
 - `const` is NOT saved in savegames — use consts for static config (good: our wave
@@ -504,6 +506,16 @@ TOWER_DEFENSE_PLAN.md        # this file
 
 > Read plan §0, §1, §2, `TD_PROGRESS.md`, all `towerdefense/` files, and
 > `data/mp/stats/structure.json` (filter `type == "DEFENSE"`). Execute Leg 2.1.
+>
+> **Leg 1.4 findings that change this leg:** (1) enabled structures build and fire
+> with base stats and ZERO research — `completeResearch` is NOT needed for basic
+> function; use research only deliberately, for weapon/armor upgrade scaling.
+> (2) Structure availability persistence across save/load is unproven —
+> `eventGameLoaded` must defensively re-enable all unlocked tiers (already done in
+> td_towers.js; keep that pattern). (3) Kill-attribution for artillery/heavy-AT
+> tiers could not be proven headlessly in 1.4 — this leg should design a harness
+> scenario that can (e.g. slow/tanky test wave with a long exposure window and
+> lives set high via the harness knob).
 >
 > **Task:** Replace the v0 unlock list with a curated 5-tier roster in `td_towers.js`.
 > 1. Curate from structure.json by weapon role — per tier pick 3–5 towers covering
