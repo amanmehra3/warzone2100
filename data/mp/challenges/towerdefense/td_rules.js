@@ -11,6 +11,7 @@
 include("challenges/towerdefense/td_maps.js");
 include("challenges/towerdefense/td_towers.js");
 include("challenges/towerdefense/td_waves.js");
+include("challenges/towerdefense/td_economy.js");
 
 // Receive events for all players' objects (needed for creep tracking in later legs).
 receiveAllEvents(true);
@@ -23,7 +24,8 @@ const tdConfig = {
 	truckLimit: 2,      // no unit production, ever
 	masterTickMs: 1000, // 1s master tick (drives the wave engine)
 	heartbeatTicks: 30, // debug heartbeat every N ticks (headless verification)
-	reorderSecs: 10     // re-issue attack-move to non-fighting creeps every N s
+	reorderSecs: 10,    // re-issue attack-move to non-fighting creeps every N s
+	difficultyKey: "medium" // selects lives from tdEconomy.livesTable (td-outpost = Medium)
 };
 
 // ---------------------------------------------------------------- mutable state
@@ -172,6 +174,11 @@ function tdPlaceStartingBoard()
 		" structLimitTower=" + getStructureLimit("GuardTower1", tdConfig.humanPlayer));
 	hackNetOn();
 	queue("tdSetReticule", 100);
+	tdInitLives();
+	if (tdDebugPlaceTowers > 0)
+	{
+		tdPlaceDebugTowers(); // harness-only (inert in the real challenge)
+	}
 	tdWavesBegin(); // start the wave cycle (BUILD phase of wave 1)
 	debug("TD: setup complete");
 }
@@ -193,11 +200,13 @@ function tdArmTimers()
 function tdMasterTick()
 {
 	tdTickCount += 1;
-	tdWaveTick(); // wave engine state machine (td_waves.js)
+	tdWaveTick();    // wave engine state machine (td_waves.js)
+	tdEconomyTick(); // passive income, leaks, lives, harness knobs (td_economy.js)
 	if (tdTickCount % tdConfig.heartbeatTicks === 0)
 	{
 		debug("TD: heartbeat tick=" + tdTickCount + " gameTime=" + gameTime +
-			" waveState=" + tdWaveState + " wave=" + tdWaveNum);
+			" waveState=" + tdWaveState + " wave=" + tdWaveNum +
+			" lives=" + tdLives + " power=" + playerPower(tdConfig.humanPlayer));
 	}
 }
 
@@ -252,12 +261,13 @@ function eventGameLoaded()
 	queue("tdSetReticule", 100);
 }
 
-// Keep the Build button truthful if the player loses trucks.
 function eventDestroyed(gameObject)
 {
+	// Bounty for combat kills + HQ-destroyed defeat (td_economy.js).
+	tdEconomyOnDestroyed(gameObject);
+	// Keep the Build button truthful if the player loses trucks.
 	if (gameObject.type === DROID && gameObject.player === tdConfig.humanPlayer)
 	{
 		queue("tdSetReticule", 100);
 	}
-	// HQ-destroyed defeat handling arrives with the economy leg (1.3).
 }

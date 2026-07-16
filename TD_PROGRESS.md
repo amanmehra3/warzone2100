@@ -8,7 +8,7 @@ Plan: TOWER_DEFENSE_PLAN.md | Branch: claude/tower-defense-game-concept-ree0e6
 | 0.2 | ✅ | 2026-07-15 | Lint recipe + headless custom-rules launch proven via `--skirmish` tests JSON; see VERIFY.md §5–§6 |
 | 1.1 | ✅ | 2026-07-15 | td-outpost challenge + td_rules/td_maps/td_towers on Sk-UrbanChasm; committed headless harness (td-harness.json); verified per VERIFY.md §6.3 |
 | 1.2 | ✅ | 2026-07-15 | Data-driven wave engine (td_waves.js) + 10-wave outpost table; full 10-wave headless cycle verified; both lanes path to HQ |
-| 1.3 | ☐ | | |
+| 1.3 | ✅ | 2026-07-16 | Economy/lives/defeat (td_economy.js); all four paths verified headlessly (leak, lives-defeat exit 0, HQ-defeat, bounty, exact passive income) |
 | 1.4 | ☐ | | |
 | 2.1 | ☐ | | |
 | 2.2 | ☐ | | |
@@ -59,6 +59,14 @@ Plan: TOWER_DEFENSE_PLAN.md | Branch: claude/tower-defense-game-concept-ree0e6
 - 2026-07-15 | 1.2 | **Save/load verification status:** SAVE side verified headlessly — --saveandquit works from the harness; all td* globals + timers + queued calls correctly serialized (inspected). LOAD side CANNOT be verified headlessly: a --skirmish-launched save stores challengeFileName="" so --loadskirmish cannot re-create the custom rules script ("Script context ... not found") and falls back to DEFAULT rules — engine limitation of the tests path (matches the old comment in tests/test.sh). Real challenge saves store challengeFileName and re-create scripts.rules on load; that path is code-audited (src/game.cpp:4722, challenge loader) and flagged **desktop-pending** | Full detail in VERIFY.md §6.4.
 - 2026-07-15 | 1.2 | Spawn stagger implemented via per-droid queue("tdSpawnNext", delayMs) draining a saved plain-array; multiple queued calls of the same function work; drain design makes duplicate queueing harmless | Verified: spawn counts exactly match wave table (60 total).
 
+- 2026-07-16 | 1.3 | **removeObject DOES fire eventDestroyed** (code audit: both removal paths land objects on the engine destroyed list, src/objmem.cpp destroyObject; confirmed empirically — the HQ-destroyed defeat fires from eventDestroyed after a script removeObject). Bounty therefore excludes script-removed droids via tdNoBountyIds (leaks + harness auto-clear marked before removal) | Exactly-once accounting verified: every wave's kills+leaks = spawn count.
+- 2026-07-16 | 1.3 | Bounty table (const, by body): Body1REC 10, Body5REC 15, Body8MBT 20, Body12SUP 25, Body11ABT 30, Body9REC 30, Body7ABT 40, Body10MBT 50; default 10. Passive income +2/s during BUILD only. Lives table easy 30 / medium 20 / hard 12; td-outpost = medium via tdConfig.difficultyKey | Verified to the exact power point (59/45 income ticks per phase + rewards + bounty all reconcile).
+- 2026-07-16 | 1.3 | **Leak mechanics adjusted:** attack-move creeps besiege the HQ from weapon range (4-9 tiles) and never enter the plan's 3-tile leak radius, so creeps within beelineRadius (12 tiles) are ordered DORDER_MOVE into the HQ; leakRadius stays 3. Result: reliable leaks, exactly-once lives decrement (leaked ids tracked; removals are deferred per gotcha 4) | Without the beeline, lives never drain.
+- 2026-07-16 | 1.3 | **Exit behavior after gameOverMessage(false): headless autogame quits with exit code 0** ("Autogame completed successfully!" path in wzapi.cpp). Canonical harness run is now a deterministic pure-leak defeat: 20 leaks, DEFEAT (lives exhausted) in wave 4, exit 0 — reproduced 3x with identical numbers | VERIFY.md §6.3 updated.
+- 2026-07-16 | 1.3 | Harness knobs added (all inert by default): tdDebugPlaceTowers (place flanking guard towers → deterministic combat kills for the bounty path) and tdDebugKillHqTick (force HQ-destroyed defeat path). Both exercised this leg via temporary uncommitted shim edits, documented in VERIFY.md | Committed shim keeps only tdDebugAutoClearSecs=60.
+- 2026-07-16 | 1.3 | **Design finding for Legs 2.x:** structures placed ON a lane tile block the corridor and attack-move creeps stall out of weapon range with no shots fired (they do NOT siege blockers). Harness towers therefore flank the lane. Real-game implication: players could stall creeps by fully walling a chokepoint — needs a stuck-creep response (e.g. order attack on nearest blocking structure) in the balance/QA legs | Logged as deferred work below.
+
 ## Known issues / deferred
+- Stuck-creep response when a lane is fully walled off (creeps currently stall out of range instead of attacking blockers) — address in Leg 2.3 balance/QA (see 1.3 Decision Log).
 - Vulkan-Headers are auto-fetched by CMake at configure time (Ubuntu 24.04 ships v275 < required 290) — configure needs github.com git access.
 - Headless challenge-launch recipe (custom `scripts.rules`) not yet established — that is Leg 0.2.

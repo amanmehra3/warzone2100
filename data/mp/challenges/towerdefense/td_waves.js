@@ -68,6 +68,9 @@ function tdBeginWave()
 	tdActiveSecs = 0;
 	tdWaveDroidIds = [];
 	tdPendingSpawns = [];
+	tdWaveBounty = 0;   // per-wave economy counters (td_economy.js)
+	tdWaveLeaks = 0;
+	tdNoBountyIds = {}; // previous wave's script-removed ids no longer needed
 	for (let g = 0; g < wave.groups.length; ++g)
 	{
 		const group = wave.groups[g];
@@ -132,8 +135,10 @@ function tdOnWaveCleared()
 	const wave = tdMapDef.waves[tdWaveNum - 1];
 	setPower(playerPower(tdConfig.humanPlayer) + wave.reward, tdConfig.humanPlayer);
 	debug("TD-WAVE: wave " + tdWaveNum + " CLEARED, reward=" + wave.reward +
-		" power=" + playerPower(tdConfig.humanPlayer));
-	tdAnnounce(_("Wave") + " " + tdWaveNum + " " + _("cleared!") + " +" + wave.reward + " " + _("power"));
+		" bounty=" + tdWaveBounty + " leaks=" + tdWaveLeaks +
+		" lives=" + tdLives + " power=" + playerPower(tdConfig.humanPlayer));
+	tdAnnounce(_("Wave") + " " + tdWaveNum + " " + _("cleared!") + " +" + wave.reward + " " + _("power") +
+		" (" + _("bounty:") + " " + tdWaveBounty + ", " + _("lives:") + " " + tdLives + ")");
 	if (tdWaveNum >= tdMapDef.waves.length)
 	{
 		tdWaveState = "DONE";
@@ -161,7 +166,7 @@ function tdReorderCreeps()
 	{
 		const lead = creeps[0];
 		debug("TD-WAVE: push check: " + creeps.length + " creeps, reordered " + reordered +
-			", lead id=" + lead.id + " at (" + lead.x + "," + lead.y + ") distHQ=" +
+			", lead id=" + lead.id + " hp=" + lead.health + " at (" + lead.x + "," + lead.y + ") distHQ=" +
 			distBetweenTwoPoints(lead.x, lead.y, tdMapDef.hq.x, tdMapDef.hq.y));
 	}
 }
@@ -207,6 +212,7 @@ function tdWaveTick()
 		debug("TD-WAVE: HARNESS auto-clear removing " + leftovers.length + " creeps");
 		for (let i = 0; i < leftovers.length; ++i)
 		{
+			tdNoBountyIds[leftovers[i].id] = true; // script removal: no bounty
 			removeObject(leftovers[i]);
 		}
 		// removals are queued (VERIFY.md 6.3.1); reconciliation below sees them next tick

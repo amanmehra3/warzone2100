@@ -326,10 +326,34 @@ default rules were replaced), but the timeout kill can truncate shutdown
 logging — treat that line as informative, not required (the
 `rules=towerdefense/td_rules.js` marker already proves the same thing).
 
-Exit code: `124` (timeout kill) is **expected and OK** while TD rules have no
-win/lose implementation (the game never ends on its own). Once Leg 1.3+ adds
-end conditions, expect `0`. Crash exit codes (`134`, `139`) are always
-failures.
+Exit code (since Leg 1.3): **`0` — the canonical run is a deterministic
+pure-leak defeat.** With no towers, every creep walks in and leaks; lives go
+20 → 0 during wave 4 and `gameOverMessage(false)` fires, which under
+`--autogame --headless` quits cleanly. Expected economy markers:
+```
+TD-ECO: lives initialized to 20 (medium)
+TD-ECO: LEAK id=... (Body1REC) lives=<one less each time> waveLeaks=...
+TD-WAVE: wave 1 CLEARED, reward=150 bounty=0 leaks=4 lives=16 power=1568
+TD-WAVE: wave 2 CLEARED, reward=180 bounty=0 leaks=6 lives=10 power=1838
+TD-WAVE: wave 3 CLEARED, reward=210 bounty=0 leaks=6 lives=4 power=2138
+TD-ECO: DEFEAT (lives exhausted) wave=4 lives=0
+```
+Exactly 20 `TD-ECO: LEAK` lines (one per life — leaks are counted exactly
+once per creep). The power values are exact: +2/s during BUILD ticks only
+(59 income ticks for the 60 s phase, 45 for each 45 s phase) plus wave
+rewards — any drift means the economy broke. Exit `124` now indicates a
+hang/regression; `134`/`139` are crashes.
+
+**Knob variants (temporary local edits to `td-harness_rules.js`, do not
+commit):**
+- *Bounty path:* add `tdDebugPlaceTowers = 2;` — places two guard towers
+  flanking lane B (off-path: on-path towers block the corridor and creeps
+  stall out of range). Expect `TD-ECO: bounty +10 (Body1REC id=...)` lines
+  and wave-end `bounty=` sums matching the power arithmetic. Script-removed
+  creeps (leaks/auto-clear) never pay bounty.
+- *HQ-destroyed path:* add `tdDebugKillHqTick = 150;` — expect
+  `TD-ECO: HARNESS killing HQ id=...` then `TD-ECO: DEFEAT (hq destroyed)`
+  with lives still > 0, and exit 0.
 
 Known-benign line in harness runs: one `Failed to load AI!` /
 `openLoadFile: file multiplay/skirmish/<garbage>` error — under `--autogame`
