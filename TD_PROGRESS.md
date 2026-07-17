@@ -10,7 +10,7 @@ Plan: TOWER_DEFENSE_PLAN.md | Branch: claude/tower-defense-game-concept-ree0e6
 | 1.2 | ✅ | 2026-07-15 | Data-driven wave engine (td_waves.js) + 10-wave outpost table; full 10-wave headless cycle verified; both lanes path to HQ |
 | 1.3 | ✅ | 2026-07-16 | Economy/lives/defeat (td_economy.js); all four paths verified headlessly (leak, lives-defeat exit 0, HQ-defeat, bounty, exact passive income) |
 | 1.4 | ✅ | 2026-07-16 | Victory, tier unlocks (waves 3/5/8), difficulty knobs, §2.3 audit. **Sprint 1 complete: td-outpost is winnable, losable, save-safe** |
-| 2.1 | ☐ | | |
+| 2.1 | ✅ | 2026-07-17 | Five-tier roster (18 towers + walls) with per-tier headless kill evidence (T3:9/T4:16/T5:18); armor research grants at waves 6/12; BALANCE.md created |
 | 2.2 | ☐ | | |
 | 2.3 | ☐ | | |
 | 3.1 | ☐ | | |
@@ -71,6 +71,10 @@ Plan: TOWER_DEFENSE_PLAN.md | Branch: claude/tower-defense-game-concept-ree0e6
 - 2026-07-16 | 1.4 | Unlock verification: all 9 unlock towers place OK post-unlock; tier-1 kills attributed (bounty only after wave-3 unlock). **Tier-2/3 kill attribution not achievable headlessly** (artillery/heavy AT vs fast movers within leak timing) — desktop-pending | VERIFY.md knob variant documents the recipe.
 - 2026-07-16 | 1.4 | §2.3 audit results: 56 globals, zero case-insensitive collisions, no for..in over arrays, no Set/Map (id-sets are plain objects), no game objects in globals, consts static-only. Fixes made: eventGameLoaded now (a) skips timer re-arm when tdGameEnded, (b) defensively re-enables all unlocked tiers (availability persistence across save/load unproven). All 19 td* globals confirmed serialized in scriptstate.json | Save inspected via --saveandquit.
 - 2026-07-16 | 1.4 | **--saveandquit fires at TRIGGER_START_LEVEL only** (src/qtscript.cpp:1431) — mid-wave/BUILD-phase headless saves impossible; autosave is disabled under autogame. Mid-game save/load remains desktop-pending (load path additionally limited per Leg 1.2 finding) | Honest limitation, documented.
+
+- 2026-07-17 | 2.1 | **Final tier table** (unlock wave → IDs): 0 → GuardTower1, GuardTower4, wall set; 3 → GuardTower-RotMg, PillBox4, GuardTower6, AASite-QuadMg1; 5 → Emplacement-MortarPit01, Emplacement-MRL-pit, WallTower03, GuardTower5; 6 → research R-Defense-WallUpgrade01 + R-Struc-Materials01; 8 → Emplacement-HvyATrocket, Emplacement-Howitzer105, GuardTower-BeamLas, AASite-QuadBof; 10 → Emplacement-PulseLaser, Emplacement-Rail2, Emplacement-PlasmaCannon; 12 → research ...02 pair (dormant on 10-wave outpost, fires on Leg 2.2 maps). All IDs verified | Roles per tier: kinetic / AT / artillery / AA.
+- 2026-07-17 | 2.1 | Research grants: only armor/HP scaling (WallUpgrade covers walls+defenses via Building-Type "Wall" filter; Struc-Materials covers plain structures incl. HQ), force-completed via completeResearch(name, 0, true) at BUILD-phase unlock. No weapon research needed for function (1.4 finding reconfirmed — all 5 tiers kill with zero weapon research) | Empirical.
+- 2026-07-17 | 2.1 | **Kill-evidence method (closes the 1.4 gap):** tdDebugTierKillTest knob (inert 0) places one tier's non-AA towers on BOTH proven flank rows at game start + forces 999 lives so all 10 waves stream past them. Results: T3 9 kills, T4 16 kills, T5 18 kills (Viper/Cobra/Scorpion victims), victory exit 0 each. AA kill test explicitly deferred to Leg 2.2 (needs VTOL waves) | Full-game exposure beats per-wave windows.
 
 ## Known issues / deferred
 - Stuck-creep response when a lane is fully walled off (creeps currently stall out of range instead of attacking blockers) — address in Leg 2.3 balance/QA (see 1.3 Decision Log).

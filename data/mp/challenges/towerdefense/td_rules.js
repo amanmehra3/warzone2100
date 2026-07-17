@@ -193,6 +193,10 @@ function tdPlaceStartingBoard()
 	{
 		tdPlaceDebugTowers(); // harness-only (inert in the real challenge)
 	}
+	if (tdDebugTierKillTest > 0)
+	{
+		tdRunTierKillTest(); // harness-only tier kill-attribution test
+	}
 	tdWavesBegin(); // start the wave cycle (BUILD phase of wave 1)
 	debug("TD: setup complete");
 }
