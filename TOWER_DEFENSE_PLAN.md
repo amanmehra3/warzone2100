@@ -174,6 +174,12 @@ Warzone 2100 arsenal of defensive emplacements. Build, upgrade, and survive all 
   (affects leak removal in Leg 1.3: a leaked creep may still be enumerable the
   same tick); (5) `addStructure()` respects structure limits — keep script-placed
   structures (HQ) at limit 1 without `enableStructure` so players can't build them.
+- **Verified in Leg 2.2:** script-spawned VTOLs IGNORE `DORDER_SCOUT` and
+  `DORDER_MOVE` (sit idle at spawn) — order them with
+  `orderDroidObj(vtol, DORDER_ATTACK, targetObject)` instead; they then fly,
+  attack, and are shot down by AA normally. Bombers that reach the HQ are
+  leak-removed ("air leak" = one life); out-of-ammo/idle VTOLs get one re-target
+  pass then depart so waves can't stall.
 - **Verified in Leg 1.3:** `removeObject()` DOES fire `eventDestroyed` — any
   script-initiated removal must be excluded from kill-reward logic (TD uses a
   `tdNoBountyIds` set marked before every removal). Attack-move creeps besiege
