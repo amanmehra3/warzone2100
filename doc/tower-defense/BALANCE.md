@@ -53,6 +53,31 @@ AA sites cannot be verified until VTOL waves exist (Leg 2.2).
 | Leak radius | 3 tiles (creeps ≤12 tiles beeline into the HQ) | attack-movers besiege from range otherwise |
 | Wave rewards (outpost) | 150→800 over 10 waves | roughly tracks wave cost |
 
+## Maps & wave tables (Leg 2.2)
+
+| Challenge | Map | Waves | Lanes | Internal difficulty | Card label |
+|---|---|---|---|---|---|
+| td-outpost | Sk-UrbanChasm (64x64) | 10 | 2 | medium | Easy |
+| td-crossfire | Sk-Mountain (96x96) | 15 | 2 simultaneous | medium | Medium |
+| td-lastline | Sk-MizaMaze (128x128) | 20 | 3 + VTOL waves (4/9/13/17) | hard | Hard |
+
+Outpost's card label says Easy (it is the entry map) while its internal knobs
+remain medium — Leg 2.3 reconciles this when the real tuning happens.
+Rewards: crossfire 150→1000, lastline 150→1200. Boss waves: crossfire 8
+(Retribution) and 15 (2x Vengeance); lastline 10, 18 (Retribution) and 20
+(3x Vengeance). The wave-12 armor research entry fires on both new maps.
+
+## Creep catalog (td_waves.js tdCreepCatalog)
+
+17 specs, all component combos verified against templates.json: runner /
+runnerTwin / runnerHmg / runnerFlamer / runnerLancer (Viper wheels),
+soldier / soldierMedium / soldierHeavy (Cobra tracks), scorpion (Scorpion
+tracks), hoverStriker / hoverInferno (Cobra hover), tank (Python HC),
+tankTiger (Tiger HC), vtolBomber (Bug + cluster bomb), vtolLancer (Scorpion
++ VTOL lancer), bossRetribution (Body7ABT railgun), bossVengeance (Body10MBT
+Tank Killer). Bosses announce on spawn; VTOLs attack the HQ directly
+(orderDroidObj) and follow the one-pass rule (VERIFY.md 6.3.2).
+
 ## Open balance questions (for Leg 2.3)
 
 - Wave delays (45–60 s) untested against real build speed.
@@ -60,3 +85,6 @@ AA sites cannot be verified until VTOL waves exist (Leg 2.2).
   a stuck-creep response before players can be allowed to full-wall lanes.
 - Tower costs vs bounty income curve not yet tuned; T1 tower spam may dominate.
 - Flamer (T1) may be too strong for wave-1 scouts.
+- Outpost card label (Easy) vs internal medium knobs needs reconciling.
+- Lastline on hard leaks out around wave 13 with zero towers — intended
+  hard, but human-run tuning needed (especially VTOL wave counts vs AA cost).

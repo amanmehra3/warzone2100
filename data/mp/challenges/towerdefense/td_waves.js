@@ -7,6 +7,32 @@
 // Savegame rules: all mutable state below is plain types (saved/restored);
 // queued spawns are re-queued from eventGameLoaded (queue() is not saved).
 
+// ---------------------------------------------------------------- creep catalog
+// Named library of creep specs (Leg 2.2). Every body/prop/turret combination
+// verified against data/mp/stats/templates.json entries. Wave tables in
+// td_maps.js reference these entries. vtol creeps are ordered via
+// orderDroidObj(DORDER_ATTACK, HQ) — VTOLs ignore DORDER_SCOUT/MOVE (verified
+// empirically); boss creeps trigger a console() warning on spawn.
+const tdCreepCatalog = {
+	runner: { name: "Machinegun Viper Wheels", body: "Body1REC", prop: "wheeled01", turrets: ["MG1Mk1"] },
+	runnerTwin: { name: "Twin Machinegun Viper Wheels", body: "Body1REC", prop: "wheeled01", turrets: ["MG2Mk1"] },
+	runnerHmg: { name: "Heavy Machinegun Viper Wheels", body: "Body1REC", prop: "wheeled01", turrets: ["MG3Mk1"] },
+	runnerFlamer: { name: "Flamer Viper Wheels", body: "Body1REC", prop: "wheeled01", turrets: ["Flame1Mk1"] },
+	runnerLancer: { name: "Lancer Viper Wheels", body: "Body1REC", prop: "wheeled01", turrets: ["Rocket-LtA-T"] },
+	soldier: { name: "Light Cannon Cobra Tracks", body: "Body5REC", prop: "tracked01", turrets: ["Cannon1Mk1"] },
+	soldierMedium: { name: "Medium Cannon Cobra Tracks", body: "Body5REC", prop: "tracked01", turrets: ["Cannon2A-TMk1"] },
+	soldierHeavy: { name: "Heavy Cannon Cobra Tracks", body: "Body5REC", prop: "tracked01", turrets: ["Cannon375mmMk1"] },
+	scorpion: { name: "Medium Cannon Scorpion Tracks", body: "Body8MBT", prop: "tracked01", turrets: ["Cannon2A-TMk1"] },
+	hoverStriker: { name: "Heavy Machinegun Cobra Hover", body: "Body5REC", prop: "hover01", turrets: ["MG3Mk1"] },
+	hoverInferno: { name: "Inferno Cobra Hover", body: "Body5REC", prop: "hover01", turrets: ["Flame2"] },
+	tank: { name: "Heavy Cannon Python Tracks", body: "Body11ABT", prop: "tracked01", turrets: ["Cannon375mmMk1"] },
+	tankTiger: { name: "Heavy Cannon Tiger Tracks", body: "Body9REC", prop: "tracked01", turrets: ["Cannon375mmMk1"] },
+	vtolBomber: { name: "SIEGE Cluster Bomber", body: "Body4ABT", prop: "V-Tol", turrets: ["Bomb1-VTOL-LtHE"], vtol: true },
+	vtolLancer: { name: "SIEGE Lancer VTOL", body: "Body8MBT", prop: "V-Tol", turrets: ["Rocket-VTOL-LtA-T"], vtol: true },
+	bossRetribution: { name: "RETRIBUTION-class breaker", body: "Body7ABT", prop: "tracked01", turrets: ["RailGun1Mk1"], boss: true },
+	bossVengeance: { name: "VENGEANCE-class breaker", body: "Body10MBT", prop: "tracked01", turrets: ["Rocket-HvyA-T"], boss: true }
+};
+
 // ---------------------------------------------------------------- state (saved)
 var tdWaveNum = 0;          // 1-based wave number; 0 = before first wave
 var tdWaveState = "IDLE";   // IDLE | BUILD | SPAWNING | ACTIVE | DONE
@@ -14,6 +40,7 @@ var tdBuildSecsLeft = 0;    // BUILD countdown (seconds)
 var tdActiveSecs = 0;       // seconds current wave has been SPAWNING/ACTIVE
 var tdWaveDroidIds = [];    // ids (numbers) of live droids of the current wave
 var tdPendingSpawns = [];   // plain spawn specs not yet executed
+var tdVtolPassMade = {};    // VTOL ids that already flew an attack pass
 // Harness-only knob: when > 0, live wave droids are force-removed after this
 // many ACTIVE seconds so the CLEARED path can be exercised headlessly (no
 // towers exist to kill creeps). MUST stay 0 here; the tests shim overrides it.
@@ -72,6 +99,7 @@ function tdBeginWave()
 	tdWaveBounty = 0;   // per-wave economy counters (td_economy.js)
 	tdWaveLeaks = 0;
 	tdNoBountyIds = {}; // previous wave's script-removed ids no longer needed
+	tdVtolPassMade = {};
 	for (let g = 0; g < wave.groups.length; ++g)
 	{
 		const group = wave.groups[g];
@@ -84,6 +112,7 @@ function tdBeginWave()
 				body: group.template.body,
 				prop: group.template.prop,
 				turrets: group.template.turrets,
+				boss: group.template.boss ? true : false,
 				spawn: group.spawn,
 				delayMs: c * group.stagger
 			});
@@ -107,6 +136,23 @@ function tdQueuePendingSpawns()
 	}
 }
 
+// Order one creep toward the HQ. Ground creeps attack-move (DORDER_SCOUT);
+// VTOLs ignore SCOUT/MOVE entirely (verified empirically) and need an attack
+// order on a specific object — the HQ.
+function tdOrderCreep(creep)
+{
+	if (creep.propulsion === "V-Tol")
+	{
+		const hqObject = getObject(STRUCTURE, tdConfig.humanPlayer, tdHqId);
+		if (hqObject)
+		{
+			orderDroidObj(creep, DORDER_ATTACK, hqObject);
+		}
+		return;
+	}
+	orderDroidLoc(creep, DORDER_SCOUT, tdMapDef.hq.x, tdMapDef.hq.y);
+}
+
 function tdSpawnNext()
 {
 	const spec = tdPendingSpawns.shift();
@@ -120,7 +166,11 @@ function tdSpawnNext()
 	if (creep)
 	{
 		tdWaveDroidIds.push(creep.id);
-		orderDroidLoc(creep, DORDER_SCOUT, tdMapDef.hq.x, tdMapDef.hq.y);
+		tdOrderCreep(creep);
+		if (spec.boss)
+		{
+			tdAnnounce(_("WARNING:") + " " + spec.name + " " + _("inbound!"));
+		}
 		debug("TD-WAVE: spawned " + spec.body + "/" + spec.turrets[0] +
 			" id=" + creep.id + " lane=" + spec.spawn +
 			" at (" + spawnPos.x + "," + spawnPos.y + "), " +
@@ -158,11 +208,30 @@ function tdReorderCreeps()
 	let reordered = 0;
 	for (let i = 0; i < creeps.length; ++i)
 	{
-		if (creeps[i].order !== DORDER_ATTACK)
+		const creep = creeps[i];
+		if (creep.order === DORDER_ATTACK)
 		{
-			orderDroidLoc(creeps[i], DORDER_SCOUT, tdMapDef.hq.x, tdMapDef.hq.y);
-			reordered += 1;
+			continue; // fighting - leave it alone
 		}
+		if (creep.propulsion === "V-Tol")
+		{
+			// VTOL design (Leg 2.2): one re-targeted pass, then the bomber
+			// leaves the battlefield (removed, no bounty, no life cost) so
+			// out-of-ammo VTOLs can never stall a wave.
+			if (tdVtolPassMade[creep.id])
+			{
+				tdNoBountyIds[creep.id] = true;
+				removeObject(creep);
+				debug("TD-WAVE: VTOL id=" + creep.id + " departed after its pass");
+				continue;
+			}
+			tdVtolPassMade[creep.id] = true;
+			tdOrderCreep(creep);
+			reordered += 1;
+			continue;
+		}
+		tdOrderCreep(creep);
+		reordered += 1;
 	}
 	if (creeps.length > 0)
 	{

@@ -2,11 +2,11 @@
 	"challenge": {
 		"alliances": 2,
 		"bases": 1,
-		"description": "Waves of SIEGE machines are coming for your Command Center. You have no army - only trucks, power, and every defensive emplacement in the Project arsenal. Build towers. Hold the line.",
-		"difficulty": "Easy",
-		"map": "Sk-UrbanChasm",
+		"description": "Two SIEGE columns advance through the mountain passes at once. Fifteen waves of converging fire. Split your defenses - or lose everything.",
+		"difficulty": "Medium",
+		"map": "Sk-Mountain",
 		"maxPlayers": 2,
-		"name": "Siege Protocol: Outpost",
+		"name": "Siege Protocol: Crossfire",
 		"powerLevel": 1,
 		"scavengers": 0,
 		"techLevel": 1,
@@ -22,6 +22,9 @@
 		"scavengers": true,
 		"teams": true
 	},
+	"scripts": {
+		"rules": "towerdefense/td_rules.js"
+	},
 	"player_0": {
 		"team": 0
 	},
@@ -30,8 +33,5 @@
 		"difficulty": "Medium",
 		"name": "SIEGE",
 		"team": 1
-	},
-	"scripts": {
-		"rules": "towerdefense/td_rules.js"
 	}
 }

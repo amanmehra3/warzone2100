@@ -397,6 +397,37 @@ simply sits idle; all TD script activity proceeds.
 - **`addStructure()` respects structure limits** — a script cannot place a
   structure whose limit is 0 for that player.
 
+### 6.3.2 Additional maps (Leg 2.2)
+
+All three challenges have a tests harness; swap the `--skirmish=` argument:
+
+| Challenge | Map | Harness | Waves | Lanes |
+|---|---|---|---|---|
+| td-outpost | Sk-UrbanChasm | `--skirmish=td-harness.json` | 10 | 2 |
+| td-crossfire | Sk-Mountain | `--skirmish=td-harness-crossfire.json` | 15 | 2 simultaneous |
+| td-lastline | Sk-MizaMaze | `--skirmish=td-harness-lastline.json` | 20 | 3 + VTOL waves |
+
+Per-map expected markers (verified 2026-07-18): `HQ placed at tile (83,89)`
+(crossfire) / `(112,105)` (lastline); `lane N reach check
+wheeled=true tracked=true hover=true` for every lane (2 and 3 lanes
+respectively); `lives initialized to 20 (medium)` / `12 (hard)` (per-map
+difficulty rows); on lastline, hard's 1.3x creep multiplier scales spawn
+counts (e.g. 3-count groups spawn 4). Crossfire run to completion shows the
+wave-12 research entry firing (`research granted: R-Defense-WallUpgrade02`,
+`R-Struc-Materials02`) and VICTORY exit 0 (with auto-clear 60 the creeps
+mostly die to the long walk timer on this 96x96 map); lastline reaches
+wave ~13 before a lives defeat (12 lives, air leaks), exit 0.
+
+**VTOL behavior (Leg 2.2, verified empirically):** script-spawned VTOLs for
+player 1 IGNORE `DORDER_SCOUT`/`DORDER_MOVE` (they sit idle, order 0); they
+fly and attack only via `orderDroidObj(v, DORDER_ATTACK, <object>)` — the
+wave engine targets the HQ. AA sites shoot them down (probe evidence: 2 of 3
+bombers destroyed by an AA ring; AA kill-attribution item closed). Bombers
+that get through dive over the HQ and are removed by the normal leak check
+(cost: one life — intended "air leak" semantics). A VTOL that goes idle
+mid-map (out of ammo) is given one re-targeted pass, then removed as
+"departed" (no bounty, no life cost) so it can never stall a wave.
+
 ### 6.4 What can and cannot be verified headlessly (honest statement)
 
 **CAN be verified headlessly** (and every later leg must):

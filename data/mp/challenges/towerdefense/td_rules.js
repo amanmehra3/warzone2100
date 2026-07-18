@@ -8,9 +8,11 @@
 // - consts hold static config only (consts are NOT saved)
 // - every timer re-armed from eventGameLoaded (timers are not saved)
 
+// Order matters: td_waves.js defines tdCreepCatalog, which the wave tables in
+// td_maps.js reference at include time.
+include("challenges/towerdefense/td_waves.js");
 include("challenges/towerdefense/td_maps.js");
 include("challenges/towerdefense/td_towers.js");
-include("challenges/towerdefense/td_waves.js");
 include("challenges/towerdefense/td_economy.js");
 
 // Receive events for all players' objects (needed for creep tracking in later legs).
@@ -37,7 +39,9 @@ const tdDifficulty = {
 
 function tdDiff()
 {
-	return tdDifficulty[tdConfig.difficultyKey] || tdDifficulty.medium;
+	// Per-map difficulty (td_maps.js) wins; tdConfig.difficultyKey is the fallback.
+	const key = (tdMapDef && tdMapDef.difficulty) ? tdMapDef.difficulty : tdConfig.difficultyKey;
+	return tdDifficulty[key] || tdDifficulty.medium;
 }
 
 // ---------------------------------------------------------------- mutable state

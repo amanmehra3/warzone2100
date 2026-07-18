@@ -2,11 +2,11 @@
 	"challenge": {
 		"alliances": 2,
 		"bases": 1,
-		"description": "Waves of SIEGE machines are coming for your Command Center. You have no army - only trucks, power, and every defensive emplacement in the Project arsenal. Build towers. Hold the line.",
-		"difficulty": "Easy",
-		"map": "Sk-UrbanChasm",
+		"description": "Deep in the MizaMaze, three lanes and the skies themselves belong to the SIEGE. Twenty waves, bombers overhead, breakers at the walls. This is the last line.",
+		"difficulty": "Hard",
+		"map": "Sk-MizaMaze",
 		"maxPlayers": 2,
-		"name": "Siege Protocol: Outpost",
+		"name": "Siege Protocol: Last Line",
 		"powerLevel": 1,
 		"scavengers": 0,
 		"techLevel": 1,
@@ -22,16 +22,16 @@
 		"scavengers": true,
 		"teams": true
 	},
+	"scripts": {
+		"rules": "towerdefense/td_rules.js"
+	},
 	"player_0": {
 		"team": 0
 	},
 	"player_1": {
 		"ai": null,
-		"difficulty": "Medium",
+		"difficulty": "Hard",
 		"name": "SIEGE",
 		"team": 1
-	},
-	"scripts": {
-		"rules": "towerdefense/td_rules.js"
 	}
 }

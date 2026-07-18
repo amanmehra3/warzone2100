@@ -42,7 +42,8 @@ var tdDebugKillHqTick = 0;    // >0: removeObject() the HQ at this master tick
 function tdInitLives()
 {
 	tdLives = tdDiff().lives;
-	debug("TD-ECO: lives initialized to " + tdLives + " (" + tdConfig.difficultyKey + ")");
+	const effectiveKey = (tdMapDef && tdMapDef.difficulty) ? tdMapDef.difficulty : tdConfig.difficultyKey;
+	debug("TD-ECO: lives initialized to " + tdLives + " (" + effectiveKey + ")");
 }
 
 function tdDefeat(reason)
