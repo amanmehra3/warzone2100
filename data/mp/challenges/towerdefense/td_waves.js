@@ -41,6 +41,7 @@ var tdActiveSecs = 0;       // seconds current wave has been SPAWNING/ACTIVE
 var tdWaveDroidIds = [];    // ids (numbers) of live droids of the current wave
 var tdPendingSpawns = [];   // plain spawn specs not yet executed
 var tdVtolPassMade = {};    // VTOL ids that already flew an attack pass
+var tdCreepStall = {};      // id -> {x, y, strikes} for the R11 stall detector
 // Harness-only knob: when > 0, live wave droids are force-removed after this
 // many ACTIVE seconds so the CLEARED path can be exercised headlessly (no
 // towers exist to kill creeps). MUST stay 0 here; the tests shim overrides it.
@@ -83,6 +84,10 @@ function tdStartBuildPhase()
 	tdBuildSecsLeft = nextWave.delay;
 	tdActiveSecs = 0;
 	tdCheckTierUnlocks(tdWaveNum + 1); // tier milestones (td_towers.js)
+	if (tdDebugBaseline === 1)
+	{
+		tdBaselineBuild(); // harness-only baseline-player stub (tuning runs)
+	}
 	debug("TD-WAVE: BUILD phase for wave " + (tdWaveNum + 1) + "/" + tdMapDef.waves.length +
 		" (" + tdBuildSecsLeft + "s)");
 	tdAnnounce(_("Wave") + " " + (tdWaveNum + 1) + " " + _("incoming in") + " " + tdBuildSecsLeft + "s");
@@ -100,6 +105,7 @@ function tdBeginWave()
 	tdWaveLeaks = 0;
 	tdNoBountyIds = {}; // previous wave's script-removed ids no longer needed
 	tdVtolPassMade = {};
+	tdCreepStall = {};
 	for (let g = 0; g < wave.groups.length; ++g)
 	{
 		const group = wave.groups[g];
@@ -229,6 +235,51 @@ function tdReorderCreeps()
 			tdOrderCreep(creep);
 			reordered += 1;
 			continue;
+		}
+		// R11 stall detector: a ground creep that is not fighting and has not
+		// materially moved between passes attacks the nearest player structure
+		// (walled-off lanes get broken through instead of soft-locking).
+		const prev = tdCreepStall[creep.id];
+		if (prev && Math.abs(prev.x - creep.x) <= 1 && Math.abs(prev.y - creep.y) <= 1)
+		{
+			prev.strikes += 1;
+		}
+		else
+		{
+			tdCreepStall[creep.id] = { x: creep.x, y: creep.y, strikes: 0 };
+		}
+		const strikes = tdCreepStall[creep.id].strikes;
+		if (strikes >= 4)
+		{
+			// Nothing attackable resolved the stall: neutral despawn failsafe
+			// (no bounty, no life lost) so a wave can never soft-lock.
+			tdNoBountyIds[creep.id] = true;
+			removeObject(creep);
+			debug("TD-WAVE: R11 stalled creep id=" + creep.id + " despawned (no resolution)");
+			continue;
+		}
+		if (strikes >= 2)
+		{
+			const blockers = enumStruct(tdConfig.humanPlayer);
+			let bestStruct = null;
+			let bestDist = 11; // only attack blockers within 10 tiles
+			for (let b = 0; b < blockers.length; ++b)
+			{
+				const d = distBetweenTwoPoints(creep.x, creep.y, blockers[b].x, blockers[b].y);
+				if (d < bestDist)
+				{
+					bestDist = d;
+					bestStruct = blockers[b];
+				}
+			}
+			if (bestStruct)
+			{
+				orderDroidObj(creep, DORDER_ATTACK, bestStruct);
+				debug("TD-WAVE: R11 stalled creep id=" + creep.id + " attacking " +
+					bestStruct.name + " at (" + bestStruct.x + "," + bestStruct.y + ")");
+				reordered += 1;
+				continue;
+			}
 		}
 		tdOrderCreep(creep);
 		reordered += 1;

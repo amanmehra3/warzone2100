@@ -201,6 +201,10 @@ function tdPlaceStartingBoard()
 	{
 		tdRunTierKillTest(); // harness-only tier kill-attribution test
 	}
+	if (tdDebugWallLane === 1)
+	{
+		tdPlaceWallLine(); // harness-only R11 stall-response test
+	}
 	tdWavesBegin(); // start the wave cycle (BUILD phase of wave 1)
 	debug("TD: setup complete");
 }

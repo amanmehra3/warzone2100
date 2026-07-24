@@ -19,7 +19,7 @@
 
 const tdMapCatalog = {
 	"Sk-UrbanChasm": {
-		difficulty: "medium",
+		difficulty: "easy", // entry map — matches the Easy challenge card (Leg 2.3)
 		// Player HQ (Command Center) tile position — player 0's map start slot.
 		hq: { x: 52, y: 56 },
 		// Where the player's two starting trucks appear (near the HQ).
@@ -34,11 +34,11 @@ const tdMapCatalog = {
 		],
 		// 10-wave table (composition unchanged from Leg 1.2; now catalog-driven).
 		waves: [
-			{ delay: 60, reward: 150, announce: "Wave 1: scout machines on lane A",
+			{ delay: 90, reward: 150, announce: "Wave 1: scout machines on lane A",
 				groups: [
 					{ count: 4, spawn: 0, stagger: 2000, template: tdCreepCatalog.runner }
 				] },
-			{ delay: 45, reward: 180, announce: "Wave 2: scouts on BOTH lanes",
+			{ delay: 60, reward: 180, announce: "Wave 2: scouts on BOTH lanes",
 				groups: [
 					{ count: 3, spawn: 0, stagger: 2000, template: tdCreepCatalog.runner },
 					{ count: 3, spawn: 1, stagger: 2000, template: tdCreepCatalog.runner }
@@ -63,7 +63,7 @@ const tdMapCatalog = {
 				] },
 			{ delay: 50, reward: 360, announce: "Wave 7: fast hover strike",
 				groups: [
-					{ count: 4, spawn: 1, stagger: 1500, template: tdCreepCatalog.hoverStriker },
+					{ count: 3, spawn: 1, stagger: 1500, template: tdCreepCatalog.hoverStriker },
 					{ count: 2, spawn: 0, stagger: 1500, template: tdCreepCatalog.hoverInferno }
 				] },
 			{ delay: 55, reward: 420, announce: "Wave 8: heavy cannons",
@@ -73,13 +73,13 @@ const tdMapCatalog = {
 				] },
 			{ delay: 55, reward: 500, announce: "Wave 9: python armor column",
 				groups: [
-					{ count: 3, spawn: 0, stagger: 3000, template: tdCreepCatalog.tank },
-					{ count: 5, spawn: 1, stagger: 2000, template: tdCreepCatalog.soldierMedium }
+					{ count: 2, spawn: 0, stagger: 3000, template: tdCreepCatalog.tank },
+					{ count: 4, spawn: 1, stagger: 2000, template: tdCreepCatalog.soldierMedium }
 				] },
-			{ delay: 60, reward: 800, announce: "Wave 10: VENGEANCE-class SIEGE breakers!",
+			{ delay: 60, reward: 800, announce: "Wave 10: VENGEANCE-class SIEGE breaker!",
 				groups: [
-					{ count: 2, spawn: 0, stagger: 4000, template: tdCreepCatalog.bossVengeance },
-					{ count: 4, spawn: 1, stagger: 2500, template: tdCreepCatalog.tank }
+					{ count: 1, spawn: 0, stagger: 4000, template: tdCreepCatalog.bossVengeance },
+					{ count: 3, spawn: 1, stagger: 2500, template: tdCreepCatalog.tank }
 				] }
 		]
 	},
@@ -96,16 +96,16 @@ const tdMapCatalog = {
 			{ x: 58, y: 4 }    // lane B: north edge (map start position 3)
 		],
 		waves: [
-			{ delay: 60, reward: 150, announce: "Wave 1: scouts from the north-west",
+			{ delay: 90, reward: 150, announce: "Wave 1: scouts from the north-west",
 				groups: [
 					{ count: 4, spawn: 0, stagger: 2000, template: tdCreepCatalog.runner }
 				] },
-			{ delay: 45, reward: 170, announce: "Wave 2: crossfire! Both lanes at once",
+			{ delay: 60, reward: 170, announce: "Wave 2: crossfire! Both lanes at once",
 				groups: [
 					{ count: 3, spawn: 0, stagger: 2000, template: tdCreepCatalog.runner },
-					{ count: 3, spawn: 1, stagger: 2000, template: tdCreepCatalog.runnerTwin }
+					{ count: 2, spawn: 1, stagger: 2000, template: tdCreepCatalog.runnerTwin }
 				] },
-			{ delay: 45, reward: 200, announce: "Wave 3: flamer runners",
+			{ delay: 55, reward: 200, announce: "Wave 3: flamer runners",
 				groups: [
 					{ count: 3, spawn: 0, stagger: 2000, template: tdCreepCatalog.runnerFlamer },
 					{ count: 3, spawn: 1, stagger: 2000, template: tdCreepCatalog.runnerHmg }
@@ -115,9 +115,9 @@ const tdMapCatalog = {
 					{ count: 3, spawn: 0, stagger: 2500, template: tdCreepCatalog.soldier },
 					{ count: 3, spawn: 1, stagger: 2500, template: tdCreepCatalog.soldier }
 				] },
-			{ delay: 50, reward: 260, announce: "Wave 5: fast hover flank",
+			{ delay: 55, reward: 260, announce: "Wave 5: fast hover flank",
 				groups: [
-					{ count: 4, spawn: 1, stagger: 1500, template: tdCreepCatalog.hoverStriker },
+					{ count: 3, spawn: 1, stagger: 1500, template: tdCreepCatalog.hoverStriker },
 					{ count: 2, spawn: 0, stagger: 2000, template: tdCreepCatalog.runnerHmg }
 				] },
 			{ delay: 50, reward: 300, announce: "Wave 6: armored column",

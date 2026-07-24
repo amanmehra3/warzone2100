@@ -36,6 +36,10 @@ var tdNoBountyIds = {};   // droid ids removed by script -> never pay bounty
 // Harness-only knobs (MUST stay inert here; the tests shim may override):
 var tdDebugPlaceTowers = 0;   // >0: script-places that many T0 guard towers near the HQ
 var tdDebugKillHqTick = 0;    // >0: removeObject() the HQ at this master tick
+var tdDebugWallLane = 0;      // 1: wall off outpost lane B (R11 stall-response test)
+var tdDebugBaseline = 0;      // 1: auto-build a baseline player layout each BUILD
+                              // phase, paying real power costs (tuning runs)
+var tdBaselineBuilt = {};     // baseline stub: towerId -> count built (saved)
 
 // ---------------------------------------------------------------- lives / defeat
 
@@ -167,9 +171,129 @@ function tdEconomyTick()
 				return;
 			}
 		}
-		else if (hqDist <= tdEconomy.beelineRadius)
+		else if (hqDist <= tdEconomy.beelineRadius && creep.order !== DORDER_ATTACK)
 		{
+			// Walk it in — but never interrupt a fight (R11 wall-attacks and
+			// normal combat keep priority).
 			orderDroidLoc(creep, DORDER_MOVE, tdMapDef.hq.x, tdMapDef.hq.y);
+		}
+	}
+}
+
+// ---------------------------------------------------------------- harness: R11 wall test
+
+// Wall a line across outpost lane B's corridor so creeps must stall on it.
+function tdPlaceWallLine()
+{
+	setStructureLimits("A0HardcreteMk1Wall", 200, tdConfig.humanPlayer);
+	let placed = 0;
+	for (let y = 52; y <= 63; ++y)
+	{
+		const wall = addStructure("A0HardcreteMk1Wall", tdConfig.humanPlayer, 40 * 128, y * 128);
+		if (wall)
+		{
+			placed += 1;
+		}
+	}
+	debug("TD-ECO: HARNESS wall line placed: " + placed + " walls at x=40, y=52..63");
+}
+
+// ---------------------------------------------------------------- harness: baseline player
+
+// Auto-build stub simulating a plausible first-time player: each BUILD phase,
+// spend available power on towers from currently-unlocked tiers at spots along
+// the lanes (paying real BuildPower costs via setPower). Tuning runs only.
+function tdBaselineCost(towerId)
+{
+	const names = Object.keys(Stats.Building);
+	for (let i = 0; i < names.length; ++i)
+	{
+		if (Stats.Building[names[i]].Id === towerId)
+		{
+			return Stats.Building[names[i]].BuildPower;
+		}
+	}
+	return 100;
+}
+
+// Build plan: [towerId, targetCount, tierIndexNeeded]
+const tdBaselinePlan = [
+	["GuardTower1", 4, 0],
+	["GuardTower4", 2, 0],
+	["PillBox4", 2, 1],
+	["GuardTower-RotMg", 2, 1],
+	["AASite-QuadMg1", 2, 1],
+	["WallTower03", 2, 2],
+	["Emplacement-MRL-pit", 2, 2],
+	["GuardTower5", 2, 2],
+	["Emplacement-HvyATrocket", 2, 4],
+	["GuardTower-BeamLas", 2, 4],
+	["Emplacement-Rail2", 2, 5]
+];
+
+// Candidate build spots: points along each HQ->spawn line at increasing
+// distance, with perpendicular offsets, so the layout hugs the lanes without
+// needing per-map probing. Placement failures just skip to the next candidate.
+function tdBaselineSpots()
+{
+	const spots = [];
+	for (let lane = 0; lane < tdMapDef.spawns.length; ++lane)
+	{
+		const sp = tdMapDef.spawns[lane];
+		const dx = sp.x - tdMapDef.hq.x;
+		const dy = sp.y - tdMapDef.hq.y;
+		const len = Math.sqrt(dx * dx + dy * dy);
+		for (let dist = 4; dist <= 14; dist += 2)
+		{
+			const px = tdMapDef.hq.x + Math.round(dx / len * dist);
+			const py = tdMapDef.hq.y + Math.round(dy / len * dist);
+			const offs = [[0, 0], [2, -2], [-2, 2]];
+			for (let o = 0; o < offs.length; ++o)
+			{
+				spots.push({ x: px + offs[o][0], y: py + offs[o][1] });
+			}
+		}
+	}
+	return spots;
+}
+
+function tdBaselineBuild()
+{
+	const spots = tdBaselineSpots();
+	let spent = 0;
+	for (let i = 0; i < tdBaselinePlan.length; ++i)
+	{
+		const towerId = tdBaselinePlan[i][0];
+		const target = tdBaselinePlan[i][1];
+		const tierNeeded = tdBaselinePlan[i][2];
+		if (tdTiersUnlocked <= tierNeeded)
+		{
+			continue; // tier not unlocked yet
+		}
+		while ((tdBaselineBuilt[towerId] || 0) < target)
+		{
+			const cost = tdBaselineCost(towerId);
+			if (playerPower(tdConfig.humanPlayer) < cost)
+			{
+				debug("TD-ECO: BASELINE out of power (wave " + (tdWaveNum + 1) + "), spent " + spent);
+				return;
+			}
+			let built = null;
+			for (let s = 0; s < spots.length && !built; ++s)
+			{
+				built = addStructure(towerId, tdConfig.humanPlayer, spots[s].x * 128, spots[s].y * 128);
+			}
+			if (!built)
+			{
+				debug("TD-ECO: BASELINE no spot for " + towerId);
+				return;
+			}
+			setPower(playerPower(tdConfig.humanPlayer) - cost, tdConfig.humanPlayer);
+			spent += cost;
+			tdBaselineBuilt[towerId] = (tdBaselineBuilt[towerId] || 0) + 1;
+			debug("TD-ECO: BASELINE built " + towerId + " #" + tdBaselineBuilt[towerId] +
+				" (cost " + cost + ") at (" + built.x + "," + built.y + ") power=" +
+				playerPower(tdConfig.humanPlayer));
 		}
 	}
 }
